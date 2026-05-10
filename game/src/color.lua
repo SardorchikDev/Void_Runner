@@ -1,4 +1,4 @@
--- Basic color class, in order to cut down on verbosity.
+-- MODIFIED: Basic color class extended with the Void Runner space palette.
 local Color = class('Color')
 
 function Color:initialize(r, g, b, a)
@@ -44,5 +44,15 @@ Color.static.PINK = Color(1, 0.2, 0.6, 1)
 Color.static.DARK = Color(0.05, 0.05, 0.1, 1)
 Color.static.DARKER = Color(0.02, 0.02, 0.05, 1)
 Color.static.GLOW = Color(0.3, 0.6, 1, 1)
+
+Color.static.DARK_GREY = Color(0.2, 0.2, 0.22, 1)
+Color.static.ICE_BLUE = Color(0.4, 0.7, 0.9, 1)
+Color.static.ORANGE_RED = Color(1.0, 0.3, 0.1, 1)
+Color.static.DEEP_PURPLE = Color(0.3, 0.1, 0.4, 1)
+Color.static.SICKLY_GREEN = Color(0.3, 0.5, 0.2, 1)
+Color.static.VOID_BLACK = Color(0.01, 0.01, 0.03, 1)
+Color.static.SHIELD_CYAN = Color(0.1, 0.8, 1.0, 1)
+Color.static.GOLD = Color(1.0, 0.85, 0.1, 1)
+Color.static.ENGINE_BLUE = Color(0.3, 0.6, 1.0, 1)
 
 return Color

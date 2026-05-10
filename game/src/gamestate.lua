@@ -1,3 +1,4 @@
+-- MODIFIED: Core draw pipeline extended so screen shake affects the world without shaking HUD overlays.
 GameState = class('GameState')
 
 -- Store the current, active GameState in a static variable.
@@ -65,17 +66,17 @@ function GameState:draw()
   -- Sort entities - first by layer, then by y-position
   self.entities = lume.sort(self.entities, GameState.defaultDrawOrder)
 
-  -- Apply screen shake if available
+  -- Perform regular draw and debug with the camera transformation.
+  love.graphics.push()
   if self.screenEffects then
       self.screenEffects:apply()
   end
-
-  -- Perform regular draw and debug with the camera transformation.
   self.cam:attach()
   for _, entity in ipairs(self.entities) do
     if entity.visible then entity:draw() end
   end
   self.cam:detach()
+  love.graphics.pop()
 
   self:overlay()
 end

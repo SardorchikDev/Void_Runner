@@ -1,3 +1,4 @@
+-- MODIFIED: Existing particle helpers fixed so systems can own and update particles locally.
 Particle = class('Particle', Entity)
 
 function Particle:initialize(pos, velocity, color, size, life, decay)
@@ -41,6 +42,7 @@ function ParticleSystem:initialize()
 end
 
 function ParticleSystem:emit(x, y, count, config)
+    config = config or {}
     for i = 1, count do
         local angle = (config.angle or 0) + (config.spread or 0) * (math.random() - 0.5)
         local speed = (config.speed or 50) * (0.5 + math.random() * 0.5)
@@ -50,26 +52,31 @@ function ParticleSystem:emit(x, y, count, config)
         local size = (config.size or 3) * (0.5 + math.random() * 0.5)
         local life = (config.life or 0.5) * (0.5 + math.random() * 0.5)
 
-        self:addEntity(Particle(
+        local particle = Particle(
             vector(x, y),
             velocity,
             color:clone(),
             size,
             life,
             config.decay
-        ))
+        )
+        particle:setGameState(self.gameState)
+        table.insert(self.particles, particle)
     end
 end
 
 function ParticleSystem:draw()
-    for _, entity in ipairs(self.entities) do
-        entity:draw()
+    for _, particle in ipairs(self.particles) do
+        particle:draw()
     end
 end
 
 function ParticleSystem:update(dt)
-    for i = #self.entities, 1, -1 do
-        self.entities[i]:update(dt)
+    for i = #self.particles, 1, -1 do
+        self.particles[i]:update(dt)
+        if self.particles[i]:isDead() then
+            table.remove(self.particles, i)
+        end
     end
 end
 
