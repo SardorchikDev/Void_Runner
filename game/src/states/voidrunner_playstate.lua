@@ -404,7 +404,8 @@ function VoidRunnerPlayState:spawnEntities(dt)
             local x = lume.random(camL + powerupMargin, camR - powerupMargin)
             local y = camT - lume.random(50, 200)
             local ptype = math.random(1, #Powerup.TYPES)
-            self:addEntity(Powerup(vector(x, y), ptype))
+            local pvel = vector(0, self.player.driftSpeed + 45)
+            self:addEntity(Powerup(vector(x, y), ptype, pvel))
         end
     end
 
@@ -656,6 +657,7 @@ end
 function VoidRunnerPlayState:onPlayerDeath()
     self:resetMultiplier()
     self.audioManager:stopEngineHum()
+    self.audioManager:stopMusic()
     self.audioManager:playExplosion()
     self:addEntity(Explosion(self.player.pos:clone(), 50))
     self.screenEffects:shake(30, 0.5)

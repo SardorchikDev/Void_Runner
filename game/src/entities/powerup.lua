@@ -10,11 +10,12 @@ Powerup.static.TYPES = {
     {name = 'double_laser', color = {0.8, 0.2, 1.0},   shape = 'cross'},
 }
 
-function Powerup:initialize(pos, typeIndex)
+function Powerup:initialize(pos, typeIndex, velocity)
     Entity.initialize(self, 'powerup', 0, pos)
     typeIndex = typeIndex or math.random(1, #Powerup.TYPES)
     self.powerupType = Powerup.TYPES[typeIndex]
     self.radius = 10
+    self.velocity = velocity or vector(0, 100)
     self.life = 8
     self.maxLife = 8
     self.bobTime = 0
@@ -23,6 +24,7 @@ end
 
 function Powerup:update(dt)
     Entity.update(self, dt)
+    self.pos = self.pos + self.velocity * dt
     self.life = self.life - dt
     self.bobTime = self.bobTime + dt
     self.rotation = self.rotation + dt * 2
