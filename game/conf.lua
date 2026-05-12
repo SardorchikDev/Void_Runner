@@ -1,6 +1,6 @@
 function love.conf(t)
-  t.identity = "returnbydeath"
-  t.window.title = "Return by death"
+  t.identity = "voidrunner"
+  t.window.title = "Void Runner"
   t.window.resizable = true
   t.window.highdpi = true
   t.externalstorage = true

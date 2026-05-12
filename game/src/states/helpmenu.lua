@@ -296,4 +296,18 @@ function HelpMenu:keypressed(key)
     end
 end
 
+function HelpMenu:gamepadpressed(joystick, button)
+    if button == 'b' or button == 'back' then
+        GameState.switchTo(VoidRunnerMainMenu())
+    elseif button == 'dpleft' or button == 'leftshoulder' then
+        self.page = math.max(1, self.page - 1)
+    elseif button == 'dpright' or button == 'rightshoulder' then
+        self.page = math.min(#self.pages, self.page + 1)
+    elseif button == 'a' then
+        if self.backHovered then
+            GameState.switchTo(VoidRunnerMainMenu())
+        end
+    end
+end
+
 return HelpMenu

@@ -5,8 +5,9 @@ set -e
 
 GAME_NAME="VoidRunner"
 LOVE_VERSION="11.5"
-BUILD_DIR="/home/sardor/Return-by-death/build"
-GAME_DIR="/home/sardor/Return-by-death/game"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BUILD_DIR="$SCRIPT_DIR"
+GAME_DIR="$(dirname "$SCRIPT_DIR")/game"
 
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"

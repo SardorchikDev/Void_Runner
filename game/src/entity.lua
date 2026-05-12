@@ -1,14 +1,10 @@
 Entity = class('Entity')
 
--- Utility to generate a randomized id for an entity.
-Entity.static.ID_LENGTH = 5
-Entity.static.ID_VALUES = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_'
+-- Incrementing counter for unique entity IDs.
+Entity.static._nextID = 0
 Entity.static.generateID = function()
-  local id = ""
-  while id:len() < Entity.ID_LENGTH do
-    id = id .. Entity.ID_VALUES:byte(love.math.random(1, Entity.ID_VALUES:len()))
-  end
-  return id
+  Entity._nextID = Entity._nextID + 1
+  return Entity._nextID
 end
 
 function Entity:initialize(tag, layer, pos)

@@ -6,9 +6,10 @@ function VoidRunnerMainMenu:initialize()
     self.time = 0
 
     self.buttons = {
-        {text = "PLAY",  action = function() GameState.switchTo(VoidRunnerPlayState()) end},
-        {text = "HELP",  action = function() GameState.switchTo(HelpMenu()) end},
-        {text = "EXIT",  action = function() love.event.quit() end}
+        {text = "PLAY",     action = function() GameState.switchTo(VoidRunnerPlayState()) end},
+        {text = "SETTINGS", action = function() GameState.switchTo(SettingsMenu()) end},
+        {text = "HELP",     action = function() GameState.switchTo(HelpMenu()) end},
+        {text = "EXIT",     action = function() love.event.quit() end}
     }
     self.selected = 1
 
@@ -17,7 +18,6 @@ function VoidRunnerMainMenu:initialize()
 end
 
 function VoidRunnerMainMenu:initBackground()
-    math.randomseed(os.time())
 
     -- parallax star layers
     self.starLayers = {}
@@ -321,6 +321,22 @@ function VoidRunnerMainMenu:keypressed(key)
         if self.selected > #self.buttons then self.selected = 1 end
     elseif key == 'escape' then
         love.event.quit()
+    elseif key == 'f3' then
+        DEBUG = not DEBUG
+    end
+end
+
+function VoidRunnerMainMenu:gamepadpressed(joystick, button)
+    if button == 'a' or button == 'start' then
+        if self.selected then
+            self.buttons[self.selected].action()
+        end
+    elseif button == 'dpup' then
+        self.selected = (self.selected or 1) - 1
+        if self.selected < 1 then self.selected = #self.buttons end
+    elseif button == 'dpdown' then
+        self.selected = (self.selected or 1) + 1
+        if self.selected > #self.buttons then self.selected = 1 end
     end
 end
 

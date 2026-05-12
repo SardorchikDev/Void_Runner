@@ -44,13 +44,19 @@ function EngineGlow:update(dt)
         end
     end
 
-    for i = #self.particles, 1, -1 do
+    local n = #self.particles
+    local i = 1
+    while i <= n do
         local p = self.particles[i]
         p.pos = p.pos + p.velocity * dt
         p.velocity = p.velocity * p.decay
         p.life = p.life - dt
         if p.life <= 0 then
-            table.remove(self.particles, i)
+            self.particles[i] = self.particles[n]
+            self.particles[n] = nil
+            n = n - 1
+        else
+            i = i + 1
         end
     end
 end

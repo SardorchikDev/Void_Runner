@@ -24,20 +24,29 @@ function Laser:update(dt)
     Entity.update(self, dt)
     self.life = self.life - dt
 
-    -- shatter asteroid after brief delay so you see the beam connect first
+    -- hit target after brief delay so you see the beam connect first
     if not self.hitDone and self.hitPos then
         if self.life <= (self.maxLife - self.hitDelay) then
             self.hitDone = true
             if self.target and not self.target:isDead() then
-                if self.target.shatterIntoDust then
-                    self.target:shatterIntoDust()
+                if self.target.takeDamage then
+                    self.target:takeDamage(1)
+                else
+                    if self.target.shatterIntoDust then
+                        self.target:shatterIntoDust()
+                    end
+                    if self.target.onDestroyed then
+                        self.target:onDestroyed(self.gameState)
+                    end
+                    self.target:destroy()
                 end
-                if self.target.onDestroyed then
-                    self.target:onDestroyed(self.gameState)
-                end
-                self.target:destroy()
-                if self.gameState and self.gameState.screenEffects then
-                    self.gameState.screenEffects:shake(3, 0.08)
+                if self.gameState then
+                    if self.gameState.screenEffects then
+                        self.gameState.screenEffects:shake(3, 0.08)
+                    end
+                    if self.gameState.onLaserKill then
+                        self.gameState:onLaserKill(self.target)
+                    end
                 end
             end
         end

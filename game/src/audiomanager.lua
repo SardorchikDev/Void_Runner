@@ -1,4 +1,4 @@
--- NEW: Procedural audio manager for Void Runner, extending the game with synthesized engine, drone, and impact sounds.
+-- Procedural audio manager with volume control, background music, and comprehensive SFX.
 AudioManager = class('AudioManager')
 
 local function generateSineWave(freq, duration, sampleRate, amplitudeFunc)
@@ -65,10 +65,94 @@ local function generateZoneSequence(sampleRate)
     return src
 end
 
+local function generatePickupSound(sampleRate)
+    sampleRate = sampleRate or 44100
+    local duration = 0.35
+    local samples = math.floor(duration * sampleRate)
+    local data = love.sound.newSoundData(samples, sampleRate, 16, 1)
+    for i = 0, samples - 1 do
+        local t = i / sampleRate
+        local freq = 600 + (t / duration) * 800
+        local env = math.max(0, 1 - (t / duration)) * math.sin(math.min(1, t / 0.02) * math.pi * 0.5)
+        local tone = math.sin(t * freq * math.pi * 2)
+        local harmonic = math.sin(t * freq * 1.5 * math.pi * 2) * 0.3
+        data:setSample(i, (tone + harmonic) * env * 0.4)
+    end
+    local src = love.audio.newSource(data, 'static')
+    src:setVolume(0.3)
+    return src
+end
+
+local function generateDashSound(sampleRate)
+    sampleRate = sampleRate or 44100
+    local duration = 0.2
+    local samples = math.floor(duration * sampleRate)
+    local data = love.sound.newSoundData(samples, sampleRate, 16, 1)
+    for i = 0, samples - 1 do
+        local t = i / sampleRate
+        local env = math.max(0, 1 - t / duration) * math.max(0, 1 - t / duration)
+        local sweep = 200 + (1 - t / duration) * 400
+        local noise = (math.random() * 2 - 1) * 0.4
+        local tone = math.sin(t * sweep * math.pi * 2) * 0.6
+        data:setSample(i, (noise + tone) * env * 0.45)
+    end
+    local src = love.audio.newSource(data, 'static')
+    src:setVolume(0.25)
+    return src
+end
+
+local function generateLaserSound(sampleRate)
+    sampleRate = sampleRate or 44100
+    local duration = 0.18
+    local samples = math.floor(duration * sampleRate)
+    local data = love.sound.newSoundData(samples, sampleRate, 16, 1)
+    for i = 0, samples - 1 do
+        local t = i / sampleRate
+        local freq = 1200 - (t / duration) * 800
+        local env = math.max(0, 1 - t / duration)
+        local tone = math.sin(t * freq * math.pi * 2) * 0.5
+        local buzz = math.sin(t * freq * 2 * math.pi * 2) * 0.25
+        data:setSample(i, (tone + buzz) * env * 0.35)
+    end
+    local src = love.audio.newSource(data, 'static')
+    src:setVolume(0.2)
+    return src
+end
+
+local function generateMenuSelect(sampleRate)
+    sampleRate = sampleRate or 44100
+    local duration = 0.12
+    local samples = math.floor(duration * sampleRate)
+    local data = love.sound.newSoundData(samples, sampleRate, 16, 1)
+    for i = 0, samples - 1 do
+        local t = i / sampleRate
+        local env = math.max(0, 1 - t / duration)
+        data:setSample(i, math.sin(t * 800 * math.pi * 2) * env * 0.3)
+    end
+    local src = love.audio.newSource(data, 'static')
+    src:setVolume(0.15)
+    return src
+end
+
 function AudioManager:initialize()
-    self.engineHum = generateSineWave(60, 2.0, 44100, function(t, d)
-        return 1.0
-    end)
+    -- Volume settings (0.0 to 1.0)
+    self.masterVolume = 1.0
+    self.musicVolume = 0.5
+    self.sfxVolume = 0.8
+
+    -- Load settings from file
+    self:loadSettings()
+
+    -- Background music
+    local musicInfo = love.filesystem.getInfo("assets/sound/music.mp3")
+    if musicInfo then
+        self.music = love.audio.newSource('assets/sound/music.mp3', 'stream')
+        self.music:setLooping(true)
+        self.music:setVolume(self.musicVolume * self.masterVolume * 0.3)
+    end
+
+    -- Engine sounds
+    self.engineHum = generateSineWave(60, 2.0, 44100, function(t, d) return 1.0 end)
     self.engineHum:setLooping(true)
     self.engineHum:setVolume(0.08)
 
@@ -105,6 +189,94 @@ function AudioManager:initialize()
     self.nearMissWhoosh:setVolume(0.15)
 
     self.drone = generateDrone(44100)
+
+    -- New sounds
+    self.pickupSound = generatePickupSound(44100)
+    self.dashSound = generateDashSound(44100)
+    self.laserSound = generateLaserSound(44100)
+    self.menuSelect = generateMenuSelect(44100)
+
+    -- Track all sources for volume updates
+    self.allSfx = {
+        self.engineHum, self.thrustBurst, self.shieldClang,
+        self.explosionSound, self.zoneTone, self.nearMissWhoosh,
+        self.drone, self.pickupSound, self.dashSound,
+        self.laserSound, self.menuSelect
+    }
+    self.baseVolumes = {}
+    for _, src in ipairs(self.allSfx) do
+        self.baseVolumes[src] = src:getVolume()
+    end
+
+    self:applyVolumes()
+end
+
+function AudioManager:loadSettings()
+    local info = love.filesystem.getInfo("settings")
+    if info and info.type == "file" then
+        local contents = love.filesystem.read("settings")
+        if contents then
+            for line in contents:gmatch("[^\n]+") do
+                local key, val = line:match("^(%w+)=(.+)$")
+                if key and val then
+                    val = tonumber(val)
+                    if val then
+                        if key == "masterVolume" then self.masterVolume = val
+                        elseif key == "musicVolume" then self.musicVolume = val
+                        elseif key == "sfxVolume" then self.sfxVolume = val
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+function AudioManager:saveSettings()
+    local data = string.format("masterVolume=%.2f\nmusicVolume=%.2f\nsfxVolume=%.2f\n",
+        self.masterVolume, self.musicVolume, self.sfxVolume)
+    love.filesystem.write("settings", data)
+end
+
+function AudioManager:applyVolumes()
+    local master = self.masterVolume
+    if self.music then
+        self.music:setVolume(self.musicVolume * master * 0.3)
+    end
+    for _, src in ipairs(self.allSfx) do
+        local base = self.baseVolumes[src] or 0.2
+        src:setVolume(base * self.sfxVolume * master)
+    end
+end
+
+function AudioManager:setMasterVolume(v)
+    self.masterVolume = math.max(0, math.min(1, v))
+    self:applyVolumes()
+    self:saveSettings()
+end
+
+function AudioManager:setMusicVolume(v)
+    self.musicVolume = math.max(0, math.min(1, v))
+    self:applyVolumes()
+    self:saveSettings()
+end
+
+function AudioManager:setSfxVolume(v)
+    self.sfxVolume = math.max(0, math.min(1, v))
+    self:applyVolumes()
+    self:saveSettings()
+end
+
+function AudioManager:playMusic()
+    if self.music and not self.music:isPlaying() then
+        self.music:play()
+    end
+end
+
+function AudioManager:stopMusic()
+    if self.music and self.music:isPlaying() then
+        self.music:stop()
+    end
 end
 
 function AudioManager:playEngineHum()
@@ -168,9 +340,37 @@ function AudioManager:stopDrone()
     end
 end
 
+function AudioManager:playPickup()
+    if not self.pickupSound then return end
+    self.pickupSound:stop()
+    self.pickupSound:play()
+end
+
+function AudioManager:playDash()
+    if not self.dashSound then return end
+    self.dashSound:stop()
+    self.dashSound:play()
+end
+
+function AudioManager:playLaser()
+    if not self.laserSound then return end
+    self.laserSound:stop()
+    self.laserSound:play()
+end
+
+function AudioManager:playMenuSelect()
+    if not self.menuSelect then return end
+    self.menuSelect:stop()
+    self.menuSelect:play()
+end
+
 function AudioManager:stopAll()
     self:stopEngineHum()
     self:stopDrone()
+    self:stopMusic()
+    if self.explosionSound then self.explosionSound:stop() end
+    if self.zoneTone then self.zoneTone:stop() end
+    if self.nearMissWhoosh then self.nearMissWhoosh:stop() end
 end
 
 return AudioManager

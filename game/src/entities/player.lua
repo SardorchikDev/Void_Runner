@@ -32,7 +32,12 @@ function Player:initialize()
 
     self.mouseTarget = nil
     self.mouseFollowSpeed = 10
+    self.baseMouseFollowSpeed = 10
     self.maxSpeed = 320
+
+    -- double laser powerup
+    self.doubleLaser = false
+    self.doubleLaserTimer = 0
 
     -- smooth dash system
     self.isDashing = false
@@ -94,6 +99,19 @@ function Player:update(dt)
     -- manual fire cooldown
     if self.manualFireCooldown > 0 then
         self.manualFireCooldown = math.max(0, self.manualFireCooldown - dt)
+    end
+
+    -- double laser timer
+    if self.doubleLaser then
+        self.doubleLaserTimer = self.doubleLaserTimer - dt
+        if self.doubleLaserTimer <= 0 then
+            self.doubleLaser = false
+        end
+    end
+
+    -- scale mouse follow speed with depth
+    if self.gameState and self.gameState.depth then
+        self.mouseFollowSpeed = self.baseMouseFollowSpeed + self.gameState.depth * 0.003
     end
 
     -- smooth dash interpolation
@@ -210,17 +228,20 @@ function Player:update(dt)
             local bestDist = self.autoAimRange
             local bestTarget = nil
 
-            for _, ent in ipairs(self.gameState:getEntitiesByTag('obstacle')) do
-                if ent ~= self and not ent:isDead() then
-                    local toTarget = ent.pos - self.pos
-                    local dist = toTarget:len()
-                    if dist < bestDist then
-                        local dir = toTarget:normalized()
-                        local dot = forward.x * dir.x + forward.y * dir.y
-                        local angle = math.acos(math.max(-1, math.min(1, dot)))
-                        if angle < self.autoAimCone then
-                            bestDist = dist
-                            bestTarget = ent
+            local targetTags = {'obstacle', 'enemy'}
+            for _, tag in ipairs(targetTags) do
+                for _, ent in ipairs(self.gameState:getEntitiesByTag(tag)) do
+                    if ent ~= self and not ent:isDead() then
+                        local toTarget = ent.pos - self.pos
+                        local dist = toTarget:len()
+                        if dist < bestDist then
+                            local dir = toTarget:normalized()
+                            local dot = forward.x * dir.x + forward.y * dir.y
+                            local angle = math.acos(math.max(-1, math.min(1, dot)))
+                            if angle < self.autoAimCone then
+                                bestDist = dist
+                                bestTarget = ent
+                            end
                         end
                     end
                 end
@@ -358,7 +379,7 @@ function Player:onDeath()
     self:gotoState('Dead')
 end
 
--- dash in a direction (left, right, or forward/up only)
+-- dash in any direction
 function Player:dash(dirX, dirY)
     if self.dead or self.isDashing then return end
     if self.dashCooldownTimer > 0 then return end
@@ -366,10 +387,6 @@ function Player:dash(dirX, dirY)
     local dir = vector(dirX, dirY)
     if dir:len() < 0.01 then return end
     dir = dir:normalized()
-
-    if dir.y > 0.3 then
-        return
-    end
 
     self.dashCooldownTimer = self.dashCooldownMax
     self.thrustActive = true
@@ -391,6 +408,11 @@ function Player:dash(dirX, dirY)
 
     if self.gameState and self.gameState.audioManager then
         self.gameState.audioManager:playThrust()
+        self.gameState.audioManager:playDash()
+    end
+
+    if self.gameState then
+        self.gameState:onPlayerDash()
     end
 end
 
@@ -635,19 +657,22 @@ function Player:manualFire()
     if self.autoAimTarget and not self.autoAimTarget:isDead() then
         target = self.autoAimTarget
     else
-        -- scan forward for nearest obstacle in narrow cone
+        -- scan forward for nearest obstacle/enemy in narrow cone
         local forward = vector(math.sin(self.angle), -math.cos(self.angle))
         local bestDist = self.autoAimRange
-        for _, ent in ipairs(self.gameState:getEntitiesByTag('obstacle')) do
-            if ent ~= self and not ent:isDead() then
-                local toTarget = ent.pos - self.pos
-                local dist = toTarget:len()
-                if dist < bestDist then
-                    local dir = toTarget:normalized()
-                    local dot = forward.x * dir.x + forward.y * dir.y
-                    if dot > math.cos(math.rad(12)) then
-                        bestDist = dist
-                        target = ent
+        local scanTags = {'obstacle', 'enemy'}
+        for _, tag in ipairs(scanTags) do
+            for _, ent in ipairs(self.gameState:getEntitiesByTag(tag)) do
+                if ent ~= self and not ent:isDead() then
+                    local toTarget = ent.pos - self.pos
+                    local dist = toTarget:len()
+                    if dist < bestDist then
+                        local dir = toTarget:normalized()
+                        local dot = forward.x * dir.x + forward.y * dir.y
+                        if dot > math.cos(math.rad(12)) then
+                            bestDist = dist
+                            target = ent
+                        end
                     end
                 end
             end
@@ -663,8 +688,18 @@ function Player:manualFire()
     local laser = Laser(self.pos:clone(), target, endPos)
     self.gameState:addEntity(laser)
 
+    if self.doubleLaser then
+        local offset = vector(8, 0)
+        local laser2 = Laser(self.pos:clone() + offset, target, endPos and (endPos + offset) or nil)
+        self.gameState:addEntity(laser2)
+    end
+
     if self.gameState.screenEffects then
         self.gameState.screenEffects:shake(2, 0.05)
+    end
+
+    if self.gameState.audioManager then
+        self.gameState.audioManager:playLaser()
     end
 end
 
