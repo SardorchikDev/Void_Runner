@@ -72,10 +72,16 @@ function ParticleSystem:draw()
 end
 
 function ParticleSystem:update(dt)
-    for i = #self.particles, 1, -1 do
+    local n = #self.particles
+    local i = 1
+    while i <= n do
         self.particles[i]:update(dt)
         if self.particles[i]:isDead() then
-            table.remove(self.particles, i)
+            self.particles[i] = self.particles[n]
+            self.particles[n] = nil
+            n = n - 1
+        else
+            i = i + 1
         end
     end
 end

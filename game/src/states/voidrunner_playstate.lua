@@ -493,13 +493,19 @@ function VoidRunnerPlayState:triggerRecordBurst()
 end
 
 function VoidRunnerPlayState:updateRecordBurst(dt)
-    for i = #self.recordBurstParticles, 1, -1 do
+    local n = #self.recordBurstParticles
+    local i = 1
+    while i <= n do
         local p = self.recordBurstParticles[i]
         p.pos = p.pos + p.vel * dt
         p.vel = p.vel * 0.94
         p.life = p.life - dt
         if p.life <= 0 then
-            table.remove(self.recordBurstParticles, i)
+            self.recordBurstParticles[i] = self.recordBurstParticles[n]
+            self.recordBurstParticles[n] = nil
+            n = n - 1
+        else
+            i = i + 1
         end
     end
 end
@@ -668,6 +674,11 @@ function VoidRunnerPlayState:activateMagnetBurst()
 end
 
 function VoidRunnerPlayState:keypressed(key, scancode, isrepeat)
+    if key == 'f3' then
+        DEBUG = not DEBUG
+        return
+    end
+
     if key == 'escape' then
         if self.paused then
             self.paused = false
@@ -801,11 +812,31 @@ function VoidRunnerPlayState:overlay()
         love.graphics.line(x, y + bh, x + corner, y + bh, x, y + bh, x, y + bh - corner)
     end
 
+    -- safe area offset for mobile
+    local safeTop, safeLeft = 0, 0
+    if MOBILE and love.window.getSafeAreaInsets then
+        local l, t = love.window.getSafeAreaInsets()
+        local ps = love.window.getPixelScale and love.window.getPixelScale() or 1
+        safeTop = t * ps
+        safeLeft = l * ps
+    end
+
+    -- mobile touch zone indicators
+    if MOBILE and self.player and not self.player:isDead() and not self.paused then
+        love.graphics.setColor(0.2, 0.5, 1.0, 0.06)
+        love.graphics.rectangle('line', safeLeft + 4, h * 0.6, w * 0.3, h * 0.35, 8, 8)
+        love.graphics.rectangle('line', w - safeLeft - w * 0.3 - 4, h * 0.6, w * 0.3, h * 0.35, 8, 8)
+        love.graphics.setFont(self.zone_font)
+        love.graphics.setColor(0.3, 0.6, 1.0, 0.12)
+        love.graphics.printf("DASH", safeLeft + 4, h * 0.75, w * 0.3, "center")
+        love.graphics.printf("FIRE", w - safeLeft - w * 0.3 - 4, h * 0.75, w * 0.3, "center")
+    end
+
     -- === TOP LEFT: ZONE INFO ===
     local zoneName = self.zoneManager:getZoneName(self.currentZone)
     local zoneStr = string.format("ZONE %d", self.currentZone)
-    local tlX = 14 * s
-    local tlY = 10 * s
+    local tlX = (14 + safeLeft) * s
+    local tlY = (10 * s) + safeTop
     bracket(tlX - 4 * s, tlY - 2 * s, 140 * s, 38 * s, {0.25, 0.6, 1.0, 0.35}, 1)
     love.graphics.setFont(self.zone_font)
     love.graphics.setColor(0.5, 0.75, 1.0, 0.5 * flicker)
@@ -818,7 +849,7 @@ function VoidRunnerPlayState:overlay()
     local tcW = 160 * s
     local tcH = 32 * s
     local tcX = cx - tcW / 2
-    local tcY = 10 * s
+    local tcY = (10 * s) + safeTop
     bracket(tcX, tcY, tcW, tcH, {0.3, 0.65, 1.0, 0.45}, 1.2)
     love.graphics.setFont(self.mono_font)
     love.graphics.setColor(0.9, 0.95, 1.0, 0.9 * flicker)
