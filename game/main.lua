@@ -33,6 +33,7 @@ if ANDROID or IOS then love.window.setFullscreen(true) end
 if IOS then love.system.authenticateLocalPlayer() end
 
 function love.load(arg)
+    math.randomseed(os.time())
     if arg[2] == 'debug' then DEBUG = true end
     if PLAY_RECORDING then
         GameState.switchTo(VoidRunnerPlayState())

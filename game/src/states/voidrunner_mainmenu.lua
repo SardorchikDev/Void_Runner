@@ -17,7 +17,6 @@ function VoidRunnerMainMenu:initialize()
 end
 
 function VoidRunnerMainMenu:initBackground()
-    math.randomseed(os.time())
 
     -- parallax star layers
     self.starLayers = {}
