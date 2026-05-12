@@ -1,5 +1,6 @@
 -- NEW: Fast horizontal enemy ship that leads the player with single cyan shots.
 EnemyScout = class('EnemyScout', Entity)
+EnemyScout.static.HEALTH = 2
 EnemyScout:include(Stateful)
 
 EnemyScout.static.SIZE = 18
@@ -14,7 +15,22 @@ function EnemyScout:initialize(side, duration)
     self.fireTimer = 0
     self.direction = side == 'left' and 1 or -1
     self.targetY = nil
+    self.health = EnemyScout.HEALTH
+    self.radius = EnemyScout.SIZE
     self:gotoState('Entering')
+end
+
+function EnemyScout:takeDamage(amount)
+    self.health = self.health - (amount or 1)
+    if self.health <= 0 then
+        if self.gameState then
+            self.gameState:addEntity(Explosion(self.pos:clone(), 25, {
+                core = {0.3, 1.0, 1.0}, mid = {0.1, 0.7, 0.9}, outer = {0.05, 0.3, 0.5}
+            }))
+            self.gameState:onEnemyKilled('scout')
+        end
+        self:destroy()
+    end
 end
 
 function EnemyScout:update(dt)

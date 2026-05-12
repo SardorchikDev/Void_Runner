@@ -8,13 +8,30 @@ EnemyDreadnought.static.FIRE_INTERVAL = 2.0
 EnemyDreadnought.static.INTRO_TIME = 1.5
 EnemyDreadnought.static.HOVER_Y_OFFSET = -80
 EnemyDreadnought.static.BULLET_SPEED = 140
+EnemyDreadnought.static.HEALTH = 5
 
-function EnemyDreadnought:initialize(duration)
+function EnemyDreadnought:initialize(duration, side)
     Entity.initialize(self, 'enemy', 0, vector(0, 0))
     self.duration = duration or 12
     self.fireTimer = EnemyDreadnought.FIRE_INTERVAL * 0.5
     self.targetY = 0
+    self.health = EnemyDreadnought.HEALTH
+    self.radius = EnemyDreadnought.WIDTH
+    self.entrySide = side or lume.randomchoice({'center', 'left', 'right'})
     self:gotoState('Entering')
+end
+
+function EnemyDreadnought:takeDamage(amount)
+    self.health = self.health - (amount or 1)
+    if self.health <= 0 then
+        if self.gameState then
+            self.gameState:addEntity(Explosion(self.pos:clone(), 50, {
+                core = {1.0, 0.8, 0.3}, mid = {1.0, 0.3, 0.1}, outer = {0.6, 0.1, 0.05}
+            }))
+            self.gameState:onEnemyKilled('dreadnought')
+        end
+        self:destroy()
+    end
 end
 
 function EnemyDreadnought:update(dt)
@@ -82,7 +99,13 @@ function Entering:update(dt)
     self.targetY = camCY + EnemyDreadnought.HOVER_Y_OFFSET
 
     local t = self.time / EnemyDreadnought.INTRO_TIME
-    self.pos.x = (camL + camR) / 2
+    local targetX = (camL + camR) / 2
+    if self.entrySide == 'left' then
+        targetX = camL + (camR - camL) * 0.3
+    elseif self.entrySide == 'right' then
+        targetX = camL + (camR - camL) * 0.7
+    end
+    self.pos.x = targetX
     self.pos.y = lume.lerp(camT - 60, self.targetY, math.min(1, Timer.tween.out(Timer.tween.cubic)(t)))
 
     if self.time > EnemyDreadnought.INTRO_TIME then
@@ -96,7 +119,13 @@ function Hovering:update(dt)
     local camL, camT = self.gameState.cam:worldCoords(0, 0)
     local camR, camB = self.gameState.cam:worldCoords(love.graphics.getWidth(), love.graphics.getHeight())
     local camCY = (camT + camB) / 2
-    self.pos.x = (camL + camR) / 2
+    local targetX = (camL + camR) / 2
+    if self.entrySide == 'left' then
+        targetX = camL + (camR - camL) * 0.3
+    elseif self.entrySide == 'right' then
+        targetX = camL + (camR - camL) * 0.7
+    end
+    self.pos.x = targetX + math.sin(self.time * 0.8) * 30
     self.targetY = camCY + EnemyDreadnought.HOVER_Y_OFFSET
     self.pos.y = self.targetY + math.sin(self.time * 1.5) * 5
 
