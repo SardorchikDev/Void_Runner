@@ -1,2 +1,19 @@
 *.DS_Store
 release/
+
+# Build artifacts
+*.love
+*.exe
+*.zip
+build/love-*
+build/VoidRunner-Windows/
+build/VoidRunner.love
+build/VoidRunner.exe
+build/VoidRunner-Windows.zip
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
