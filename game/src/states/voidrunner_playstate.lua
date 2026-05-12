@@ -98,10 +98,15 @@ function VoidRunnerPlayState:reset()
     self.timeWarpTimer = 0
     self.timeWarpCharges = 0
     self.magnetBurstCooldown = 0
+    self.magnetBurstBaseCooldown = 8.0
 
     self.multiplier = 1.0
     self.multiplierTimer = 0
     self.lastHitTime = 0
+    self.killScore = 0
+
+    self.minelayerSpawnTimer = 0
+    self.swarmSpawnTimer = 0
 
     self.thrustCooldownDisplay = 0
 
@@ -183,6 +188,7 @@ function VoidRunnerPlayState:startGame()
     self:reset()
     self:gotoState('Playing')
     self.audioManager:playDrone()
+    self.audioManager:playMusic()
     self.attempts = self.attempts + 1
     love.mouse.setVisible(false)
     love.mouse.setGrabbed(true)
@@ -397,23 +403,75 @@ function VoidRunnerPlayState:spawnEntities(dt)
             local powerupMargin = math.min(30, camW * 0.2)
             local x = lume.random(camL + powerupMargin, camR - powerupMargin)
             local y = camT - lume.random(50, 200)
-            local ptype = math.random(1, 3)
-            self:addEntity(Powerup(vector(x, y), ptype, vector(0, self.player.driftSpeed + 45)))
+            local ptype = math.random(1, #Powerup.TYPES)
+            self:addEntity(Powerup(vector(x, y), ptype))
+        end
+    end
+
+    if config.enemyEnabled then
+        self.minelayerSpawnTimer = self.minelayerSpawnTimer + dt
+        local mlRate = self.currentZone >= 4 and 15 or 25
+        if self.minelayerSpawnTimer > mlRate then
+            self.minelayerSpawnTimer = 0
+            local side = math.random() < 0.5 and 'left' or 'right'
+            self:addEntity(EnemyMinelayer(side, 10))
+        end
+
+        self.swarmSpawnTimer = self.swarmSpawnTimer + dt
+        local swarmRate = self.currentZone >= 5 and 12 or 20
+        if self.currentZone >= 3 and self.swarmSpawnTimer > swarmRate then
+            self.swarmSpawnTimer = 0
+            local side = math.random() < 0.5 and 'left' or 'right'
+            local count = math.random(3, 5)
+            for i = 1, count do
+                self:addEntity(EnemySwarm(side, i - 1, count))
+            end
         end
     end
 end
 
 function VoidRunnerPlayState:updateMultiplier(dt)
     self.multiplierTimer = self.multiplierTimer + dt
-    if self.multiplierTimer >= 5.0 then
+    if self.multiplierTimer >= 8.0 then
         self.multiplierTimer = 0
-        self.multiplier = self.multiplier + 0.5
+        self.multiplier = self.multiplier + 0.1
     end
+end
+
+function VoidRunnerPlayState:boostMultiplier(amount)
+    self.multiplier = self.multiplier + (amount or 0.25)
+    self.multiplierTimer = 0
 end
 
 function VoidRunnerPlayState:resetMultiplier()
     self.multiplier = 1.0
     self.multiplierTimer = 0
+end
+
+function VoidRunnerPlayState:onPlayerDash()
+    self:boostMultiplier(0.05)
+end
+
+function VoidRunnerPlayState:onEnemyKilled(enemyType)
+    local scoreValues = {
+        scout = 150,
+        dreadnought = 500,
+        minelayer = 250,
+        swarm = 75,
+    }
+    local value = scoreValues[enemyType] or 100
+    self.score = self.score + value * self.multiplier
+    self.killScore = self.killScore + value
+    self:boostMultiplier(0.15)
+end
+
+function VoidRunnerPlayState:onLaserKill(target)
+    if target and target.tag == 'obstacle' then
+        local value = 50 * self.multiplier
+        self.score = self.score + value
+        self.killScore = self.killScore + 50
+        self:boostMultiplier(0.1)
+    end
 end
 
 function VoidRunnerPlayState:triggerRecordBurst()
@@ -485,21 +543,42 @@ function VoidRunnerPlayState:updatePowerups(dt)
 end
 
 function VoidRunnerPlayState:collectPowerup(pu)
-    if pu.ptype == Powerup.SHIELD then
+    local typeName = pu.powerupType.name
+    self.audioManager:playPickup()
+
+    if typeName == 'shield' then
         if not self.shield then
             self.shield = Shield(self.player)
             self:addEntity(self.shield)
         else
             self.shield:activate()
         end
-    elseif pu.ptype == Powerup.TIME_WARP then
-        self.timeWarpCharges = math.min(1, self.timeWarpCharges + 1)
+    elseif typeName == 'time_warp' then
+        self.timeWarpCharges = math.min(3, self.timeWarpCharges + 1)
         self.screenEffects:flash(0.35, 0.75, 1.0, 0.18, 0.2)
-    elseif pu.ptype == Powerup.MAGNET_BURST then
+    elseif typeName == 'magnet_burst' then
         if self.magnetBurstCooldown <= 0 then
-            self.magnetBurstCooldown = 8.0
+            local cd = self.magnetBurstBaseCooldown - self.currentZone * 0.5
+            self.magnetBurstCooldown = math.max(4, cd)
             self:addEntity(Shockwave(self.player.pos:clone()))
         end
+    elseif typeName == 'score_bonus' then
+        local bonus = 200 * self.multiplier * self.currentZone
+        self.score = self.score + bonus
+        self.screenEffects:flash(1.0, 0.85, 0.1, 0.15, 0.15)
+    elseif typeName == 'speed_boost' then
+        self.screenEffects:flash(0.1, 1.0, 0.4, 0.2, 0.2)
+        self.screenEffects:blur(0.3, 0.2)
+        if self.player then
+            self.player.isDashing = false
+            self.player.dashCooldownTimer = 0
+        end
+    elseif typeName == 'double_laser' then
+        if self.player then
+            self.player.doubleLaser = true
+            self.player.doubleLaserTimer = 10.0
+        end
+        self.screenEffects:flash(0.8, 0.2, 1.0, 0.15, 0.15)
     end
 end
 
@@ -553,6 +632,8 @@ function VoidRunnerPlayState:checkNearMiss()
                 if not self.nearMissChecks[ast.id] then
                     self.nearMissChecks[ast.id] = true
                     self.audioManager:playNearMiss()
+                    self:boostMultiplier(0.2)
+                    self.score = self.score + 25 * self.multiplier
                 end
             end
         end
@@ -580,7 +661,8 @@ end
 
 function VoidRunnerPlayState:activateMagnetBurst()
     if self.magnetBurstCooldown <= 0 then
-        self.magnetBurstCooldown = 8.0
+        local cd = self.magnetBurstBaseCooldown - self.currentZone * 0.5
+        self.magnetBurstCooldown = math.max(4, cd)
         self:addEntity(Shockwave(self.player.pos:clone()))
     end
 end
@@ -602,6 +684,10 @@ function VoidRunnerPlayState:keypressed(key, scancode, isrepeat)
                     self.audioManager:playDrone()
                     love.mouse.setVisible(false)
                     love.mouse.setGrabbed(true)
+                end},
+                {text = "RESTART", action = function()
+                    self.paused = false
+                    self:startGame()
                 end},
                 {text = "QUIT", action = function() GameState.switchTo(VoidRunnerMainMenu()) end}
             }
@@ -629,6 +715,42 @@ function VoidRunnerPlayState:keypressed(key, scancode, isrepeat)
     end
 end
 
+function VoidRunnerPlayState:gamepadpressed(joystick, button)
+    if self.paused then
+        if button == 'dpup' then
+            self.paused_selected = math.max(1, self.paused_selected - 1)
+        elseif button == 'dpdown' then
+            self.paused_selected = math.min(#self.paused_buttons, self.paused_selected + 1)
+        elseif button == 'a' or button == 'start' then
+            if self.paused_buttons then
+                self.paused_buttons[self.paused_selected].action()
+            end
+        end
+        return
+    end
+
+    if button == 'start' then
+        self:keypressed('escape')
+        return
+    end
+
+    if not self.player or self.player:isDead() then return end
+
+    if button == 'a' or button == 'x' then
+        self.player:manualFire()
+    elseif button == 'b' or button == 'y' then
+        self:activateTimeWarp()
+    elseif button == 'dpleft' then
+        self.player:dash(-1, 0)
+    elseif button == 'dpright' then
+        self.player:dash(1, 0)
+    elseif button == 'dpup' then
+        self.player:dash(0, -1)
+    elseif button == 'dpdown' then
+        self.player:dash(0, 1)
+    end
+end
+
 function VoidRunnerPlayState:draw()
     GameState.draw(self)
 end
@@ -639,14 +761,24 @@ function VoidRunnerPlayState:drawBackground()
     local zg = self.zoneColor.g or 0
     local zb = self.zoneColor.b or 0
 
-    for y = 0, h, 4 do
-        local t = y / h
-        local r = 0.02 + t * 0.03 + zr * 0.5
-        local g = 0.02 + t * 0.04 + zg * 0.5
-        local b = 0.08 + t * 0.08 + zb * 0.5
-        love.graphics.setColor(r, g, b, 1)
-        love.graphics.rectangle('fill', 0, y, w, 4)
+    if not self.bgCanvas or self.bgCanvas:getWidth() ~= w or self.bgCanvas:getHeight() ~= h
+       or self.bgLastZR ~= zr or self.bgLastZG ~= zg or self.bgLastZB ~= zb then
+        self.bgCanvas = love.graphics.newCanvas(w, h)
+        self.bgLastZR, self.bgLastZG, self.bgLastZB = zr, zg, zb
+        love.graphics.setCanvas(self.bgCanvas)
+        for y = 0, h, 4 do
+            local t = y / h
+            local r = 0.02 + t * 0.03 + zr * 0.5
+            local g = 0.02 + t * 0.04 + zg * 0.5
+            local b = 0.08 + t * 0.08 + zb * 0.5
+            love.graphics.setColor(r, g, b, 1)
+            love.graphics.rectangle('fill', 0, y, w, 4)
+        end
+        love.graphics.setCanvas()
     end
+
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(self.bgCanvas, 0, 0)
 end
 
 function VoidRunnerPlayState:overlay()
@@ -929,6 +1061,12 @@ function VoidRunnerPlayState:overlay()
         love.graphics.setColor(0, 0, 0, 1 * (1 - (self.white_fader.time / self.white_fader.duration)))
         love.graphics.rectangle('fill', 0, 0, w, h)
     end
+
+    if DEBUG then
+        love.graphics.setColor(0.5, 1.0, 0.5, 0.6)
+        love.graphics.setFont(self.zone_font)
+        love.graphics.printf(string.format("FPS: %d", love.timer.getFPS()), 4, h - 20 * s, 100, "left")
+    end
 end
 
 function VoidRunnerPlayState:touchpressed(id, x, y, dx, dy, pressure)
@@ -1066,6 +1204,14 @@ function Initial:keypressed(key, scancode, isrepeat)
     end
 end
 
+function Initial:gamepadpressed(joystick, button)
+    if button == 'a' or button == 'start' then
+        self:startGame()
+    elseif button == 'b' or button == 'back' then
+        GameState.switchTo(VoidRunnerMainMenu())
+    end
+end
+
 local Playing = VoidRunnerPlayState:addState('Playing')
 
 function Playing:enteredState()
@@ -1079,16 +1225,41 @@ function Playing:update(dt)
             local wx, wy = self.cam:worldCoords(mx, my)
             self.player.mouseTarget = vector(wx, wy)
         end
+
+        -- gamepad analog stick movement
+        local joysticks = love.joystick.getJoysticks()
+        if #joysticks > 0 then
+            local js = joysticks[1]
+            if js:isGamepad() then
+                local lx = js:getGamepadAxis('leftx')
+                local ly = js:getGamepadAxis('lefty')
+                local deadzone = 0.2
+                if math.abs(lx) > deadzone or math.abs(ly) > deadzone then
+                    local wx2, wy2 = self.cam:worldCoords(
+                        love.graphics.getWidth() / 2 + lx * love.graphics.getWidth() * 0.4,
+                        love.graphics.getHeight() / 2 + ly * love.graphics.getHeight() * 0.4
+                    )
+                    self.player.mouseTarget = vector(wx2, wy2)
+                end
+
+                -- right stick flick for dash
+                local rx = js:getGamepadAxis('rightx')
+                local ry = js:getGamepadAxis('righty')
+                if math.abs(rx) > 0.7 or math.abs(ry) > 0.7 then
+                    local dx = math.abs(rx) > 0.7 and (rx > 0 and 1 or -1) or 0
+                    local dy = math.abs(ry) > 0.7 and (ry > 0 and 1 or -1) or 0
+                    self.player:dash(dx, dy)
+                end
+            end
+        end
     end
 
     VoidRunnerPlayState.update(self, dt)
 end
 
 function Playing:keypressed(key, scancode, isrepeat)
-    -- parent handles pause toggle, pause menu nav, warp, ESC
     VoidRunnerPlayState.keypressed(self, key, scancode, isrepeat)
 
-    -- dash only when alive and not paused
     if self.paused then return end
     if not self.player or self.player:isDead() then return end
 
@@ -1098,6 +1269,8 @@ function Playing:keypressed(key, scancode, isrepeat)
         self.player:dash(1, 0)
     elseif key == 'up' or key == 'w' then
         self.player:dash(0, -1)
+    elseif key == 'down' or key == 's' then
+        self.player:dash(0, 1)
     elseif key == 'space' then
         self.player:manualFire()
     end
@@ -1162,12 +1335,16 @@ function Dead:overlay()
 
     love.graphics.setColor(1, 1, 1, 0.9 * uiAlpha)
     love.graphics.setFont(self.time_font)
-    love.graphics.printf(string.format("DEPTH: %05dm", math.floor(self.depth)), 0, cy - 10 * s, w, "center")
+    love.graphics.printf(string.format("DEPTH: %05dm", math.floor(self.depth)), 0, cy - 18 * s, w, "center")
+
+    love.graphics.setColor(0.8, 0.9, 1.0, 0.8 * uiAlpha)
+    love.graphics.setFont(self.zone_font)
+    love.graphics.printf(string.format("SCORE: %d", math.floor(self.score)), 0, cy + 2 * s, w, "center")
 
     local zoneName = self.zoneManager:getZoneName(self.currentZone)
     love.graphics.setColor(0.5, 0.7, 1.0, 0.7 * uiAlpha)
     love.graphics.setFont(self.zone_font)
-    love.graphics.printf(string.format("ZONE %d / %s", self.currentZone, zoneName), 0, cy + 18 * s, w, "center")
+    love.graphics.printf(string.format("ZONE %d / %s", self.currentZone, zoneName), 0, cy + 20 * s, w, "center")
 
     local flavor = self.zoneManager:getFlavorText(self.currentZone)
     love.graphics.setColor(0.7, 0.7, 0.8, 0.6 * uiAlpha)
@@ -1229,6 +1406,14 @@ function Dead:keypressed(key, scancode, isrepeat)
     end
     if key == "space" or key == "return" then
         self:startGame()
+    end
+end
+
+function Dead:gamepadpressed(joystick, button)
+    if button == 'a' or button == 'start' then
+        self:startGame()
+    elseif button == 'b' or button == 'back' then
+        GameState.switchTo(VoidRunnerMainMenu())
     end
 end
 
