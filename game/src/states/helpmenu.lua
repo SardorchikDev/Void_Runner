@@ -165,6 +165,10 @@ function HelpMenu:draw()
         drawLine("", 212 * s)
         drawLine("PROJECTILES:", 234 * s)
         drawLine("Red energy bolts. One hit = ship destroyed (unless shielded).", 258 * s)
+        drawLine("", 284 * s)
+        drawLine("BOSSES:", 306 * s)
+        drawLine("Powerful warships appear at zone milestones.", 330 * s)
+        drawLine("Multi-phase attacks. Destroy them for massive score bonuses.", 354 * s)
 
     elseif self.page == 5 then
         drawHeader("ZONES", 0)

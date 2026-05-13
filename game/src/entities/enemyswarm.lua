@@ -28,7 +28,7 @@ function EnemySwarm:takeDamage(amount)
             self.gameState:addEntity(Explosion(self.pos:clone(), 12, {
                 core = {0.5, 1.0, 0.3}, mid = {0.3, 0.8, 0.1}, outer = {0.1, 0.4, 0.05}
             }))
-            self.gameState:onEnemyKilled('swarm')
+            self.gameState:onEnemyKilled('swarm', self.pos:clone())
         end
         self:destroy()
     end

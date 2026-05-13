@@ -27,7 +27,7 @@ function EnemyScout:takeDamage(amount)
             self.gameState:addEntity(Explosion(self.pos:clone(), 25, {
                 core = {0.3, 1.0, 1.0}, mid = {0.1, 0.7, 0.9}, outer = {0.05, 0.3, 0.5}
             }))
-            self.gameState:onEnemyKilled('scout')
+            self.gameState:onEnemyKilled('scout', self.pos:clone())
         end
         self:destroy()
     end

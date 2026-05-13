@@ -269,6 +269,18 @@ function VoidRunnerMainMenu:draw()
         love.graphics.printf(btn.text, bx, by + btnH / 2 - 12 * s, btnW, "center")
     end
 
+    -- high score
+    local saveFileInfo = love.filesystem.getInfo("bestscore")
+    if saveFileInfo and saveFileInfo.type == "file" then
+        local contents = love.filesystem.read("bestscore")
+        local best = tonumber(contents)
+        if best then
+            love.graphics.setFont(self.small_font)
+            love.graphics.setColor(1.0, 0.85, 0.2, 0.6)
+            love.graphics.printf(string.format("BEST: %dm", math.floor(best)), 0, py + panelH - 42 * s, w, "center")
+        end
+    end
+
     -- controls hint
     love.graphics.setFont(self.small_font)
     love.graphics.setColor(0.3, 0.5, 0.7, 0.4)
