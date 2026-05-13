@@ -1,4 +1,4 @@
--- NEW: Replaces rectangular block hazards with rotating convex asteroid polygons.
+-- Replaces rectangular block hazards with rotating convex asteroid polygons.
 Asteroid = class('Asteroid', Entity)
 
 function Asteroid:initialize(pos, velocity, zone, radiusOverride)
@@ -58,6 +58,15 @@ function Asteroid:initialize(pos, velocity, zone, radiusOverride)
         end
     end
 
+    -- rim glow color based on zone
+    if self.zone >= 4 then
+        self.rimColor = {0.2, 0.8, 0.3}
+    elseif self.zone == 3 then
+        self.rimColor = {0.8, 0.4, 0.15}
+    else
+        self.rimColor = {0.4, 0.5, 0.7}
+    end
+
     local cx, cy = 0, 0
     for i = 1, #self.vertices, 2 do
         cx = cx + self.vertices[i]
@@ -111,7 +120,6 @@ function Asteroid:update(dt)
         if other ~= self and other.collision_shape and not other.dead and not self.dead then
             local collides, dx, dy = self.collision_shape:collidesWith(other.collision_shape)
             if collides then
-                -- both asteroids shatter into dust on collision
                 self:shatterIntoDust()
                 other:shatterIntoDust()
                 self:destroy()
@@ -150,25 +158,76 @@ end
 function Asteroid:draw()
     local r, g, b = self.tint[1], self.tint[2], self.tint[3]
     local er, eg, eb = self.edgeTint[1], self.edgeTint[2], self.edgeTint[3]
+    local rr, rg, rb = self.rimColor[1], self.rimColor[2], self.rimColor[3]
 
     love.graphics.push()
     love.graphics.translate(self.pos:unpack())
     love.graphics.rotate(self.rotation)
 
-    love.graphics.setColor(r * 0.5, g * 0.5, b * 0.5, 0.4)
-    love.graphics.polygon('fill', self.vertices)
+    -- surface normal lighting: per-face color variation
+    local lightDirX, lightDirY = 0.3, -0.7
+    local lightLen = math.sqrt(lightDirX * lightDirX + lightDirY * lightDirY)
+    lightDirX, lightDirY = lightDirX / lightLen, lightDirY / lightLen
 
+    local verts = self.vertices
+    local numPts = #verts / 2
+    -- draw per-face triangles with lighting
+    for i = 1, numPts do
+        local x1 = verts[(i - 1) * 2 + 1]
+        local y1 = verts[(i - 1) * 2 + 2]
+        local ni = (i % numPts)
+        local x2 = verts[ni * 2 + 1]
+        local y2 = verts[ni * 2 + 2]
+
+        -- edge normal (pointing outward)
+        local edgeX = x2 - x1
+        local edgeY = y2 - y1
+        local nx = edgeY
+        local ny = -edgeX
+        local nLen = math.sqrt(nx * nx + ny * ny)
+        if nLen > 0 then
+            nx, ny = nx / nLen, ny / nLen
+        end
+
+        local dot = nx * lightDirX + ny * lightDirY
+        local lightMod = dot * 0.25
+
+        local fr = math.max(0, math.min(1, r * 0.5 + lightMod))
+        local fg = math.max(0, math.min(1, g * 0.5 + lightMod))
+        local fb = math.max(0, math.min(1, b * 0.5 + lightMod))
+
+        love.graphics.setColor(fr, fg, fb, 0.7)
+        love.graphics.polygon('fill', 0, 0, x1, y1, x2, y2)
+    end
+
+    -- base edge outline
     love.graphics.setColor(r * 0.8, g * 0.8, b * 0.8, 0.9)
     love.graphics.setLineWidth(1.5)
-    love.graphics.polygon('line', self.vertices)
+    love.graphics.polygon('line', verts)
 
-    love.graphics.setColor(er * 1.2, eg * 1.2, eb * 1.2, 0.6)
+    -- rim glow (2-pass additive)
+    love.graphics.setBlendMode('add')
+    love.graphics.setColor(rr, rg, rb, 0.04)
+    love.graphics.setLineWidth(6)
+    love.graphics.polygon('line', verts)
+    love.graphics.setColor(rr, rg, rb, 0.08)
     love.graphics.setLineWidth(3)
-    love.graphics.polygon('line', self.vertices)
+    love.graphics.polygon('line', verts)
 
+    -- dust halo for large asteroids
+    if self.radius > 25 then
+        love.graphics.setColor(rr * 0.5, rg * 0.5, rb * 0.5, 0.04)
+        love.graphics.circle('fill', 0, 0, self.radius * 1.6)
+    end
+    love.graphics.setBlendMode('alpha')
+
+    -- craters with depth
     for _, crater in ipairs(self.craters) do
-        love.graphics.setColor(r * 0.3, g * 0.3, b * 0.3, 0.5)
+        love.graphics.setColor(r * 0.2, g * 0.2, b * 0.2, 0.8)
         love.graphics.circle('fill', crater.x, crater.y, crater.r)
+        -- bright rim arc (top half)
+        love.graphics.setColor(r * 1.5, g * 1.5, b * 1.5, 0.4)
+        love.graphics.arc('line', 'open', crater.x, crater.y, crater.r, -math.pi, 0)
     end
 
     love.graphics.pop()
@@ -180,6 +239,22 @@ end
 
 function Asteroid:shatterIntoDust()
     if not self.gameState then return end
+    -- impact flash (3 fast particles)
+    for i = 1, 3 do
+        local angle = lume.random(0, math.pi * 2)
+        local speed = lume.random(200, 400)
+        local vel = vector(math.cos(angle) * speed, math.sin(angle) * speed)
+        local flash = Fragment(
+            self.pos:clone(),
+            vel,
+            lume.random(2, 4),
+            Color(1, 0.9, 0.7),
+            0, 0
+        )
+        flash.life = 0.1
+        flash.maxLife = 0.1
+        self.gameState:addEntity(flash)
+    end
     -- tiny rocky fragments
     local count = math.random(4, 7)
     for i = 1, count do
@@ -199,7 +274,7 @@ function Asteroid:shatterIntoDust()
         self.gameState:addEntity(frag)
     end
     -- fine dust cloud
-    local dustCount = math.random(10, 18)
+    local dustCount = math.random(18, 28)
     for i = 1, dustCount do
         local angle = lume.random(0, math.pi * 2)
         local speed = lume.random(10, 50)

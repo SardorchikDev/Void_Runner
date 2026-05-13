@@ -12,6 +12,7 @@ function Boss:initialize(zoneNum)
     self.zoneNum = zoneNum or 3
     self.maxHealth = Boss.BASE_HEALTH + (zoneNum - 2) * 15
     self.health = self.maxHealth
+    self.displayHP = self.health
     self.radius = Boss.WIDTH
     self.fireTimer = 0
     self.phase = 1
@@ -58,6 +59,9 @@ function Boss:takeDamage(amount)
         self.shieldTimer = 2.0
         if self.gameState then
             self.gameState.screenEffects:flash(self.cr, self.cg, self.cb, 0.3, 0.3)
+            if self.gameState.audioManager and self.gameState.audioManager.playBossPhaseShift then
+                self.gameState.audioManager:playBossPhaseShift()
+            end
         end
     elseif self.phase == 2 and hpRatio <= 0.25 then
         self.phase = 3
@@ -65,6 +69,9 @@ function Boss:takeDamage(amount)
         if self.gameState then
             self.gameState.screenEffects:flash(1, 0.2, 0.2, 0.4, 0.3)
             self.gameState.screenEffects:chromaticAberration(0.8, 2.0)
+            if self.gameState.audioManager and self.gameState.audioManager.playBossPhaseShift then
+                self.gameState.audioManager:playBossPhaseShift()
+            end
         end
     end
 
@@ -112,6 +119,9 @@ function Boss:update(dt)
     self.phaseTimer = self.phaseTimer + dt
     self.spinAngle = self.spinAngle + dt * (1 + self.phase * 0.5)
 
+    -- lerp displayHP toward real HP
+    self.displayHP = lume.lerp(self.displayHP, self.health, math.min(1, dt / 0.3))
+
     if self.shieldActive then
         self.shieldTimer = self.shieldTimer - dt
         if self.shieldTimer <= 0 then
@@ -156,16 +166,45 @@ function Boss:drawHealthBar()
     love.graphics.setColor(0.1, 0.1, 0.15, 0.8)
     love.graphics.rectangle('fill', barX - 2, barY - 2, barW + 4, barH + 4)
 
-    local hpRatio = math.max(0, self.health / self.maxHealth)
+    -- animated HP fill (lerps to real value)
+    local hpRatio = math.max(0, self.displayHP / self.maxHealth)
     local r = lume.lerp(1.0, self.cr, hpRatio)
     local g = lume.lerp(0.1, self.cg, hpRatio)
     local b = lume.lerp(0.1, self.cb, hpRatio)
     love.graphics.setColor(r, g, b, 0.9)
     love.graphics.rectangle('fill', barX, barY, barW * hpRatio, barH)
 
+    -- scanline effect when HP < 30%
+    local realHPRatio = math.max(0, self.health / self.maxHealth)
+    if realHPRatio < 0.3 then
+        love.graphics.setColor(0, 0, 0, 0.3)
+        love.graphics.setLineWidth(0.5)
+        for y = barY, barY + barH, 3 do
+            love.graphics.line(barX, y, barX + barW * hpRatio, y)
+        end
+    end
+
     love.graphics.setColor(0.5, 0.6, 0.7, 0.4)
     love.graphics.setLineWidth(1)
     love.graphics.rectangle('line', barX, barY, barW, barH)
+
+    -- zone-appropriate icon left of bar
+    local iconX = barX - 16 * s
+    local iconY = barY + barH / 2
+    love.graphics.setColor(self.cr, self.cg, self.cb, 0.8)
+    if self.zoneNum == 3 then
+        -- sword icon
+        love.graphics.setLineWidth(1.5)
+        love.graphics.line(iconX, iconY - 6 * s, iconX, iconY + 6 * s)
+        love.graphics.line(iconX - 3 * s, iconY - 2 * s, iconX + 3 * s, iconY - 2 * s)
+    elseif self.zoneNum == 4 then
+        -- lightning bolt
+        love.graphics.polygon('fill', iconX - 2 * s, iconY - 6 * s, iconX + 1 * s, iconY - 1 * s, iconX - 1 * s, iconY - 1 * s, iconX + 2 * s, iconY + 6 * s, iconX - 1 * s, iconY + 1 * s, iconX + 1 * s, iconY + 1 * s)
+    elseif self.zoneNum == 5 then
+        -- eye shape
+        love.graphics.ellipse('line', iconX, iconY, 5 * s, 3 * s)
+        love.graphics.circle('fill', iconX, iconY, 1.5 * s)
+    end
 
     local font = self.gameState and self.gameState.zone_font
     if font then
@@ -190,40 +229,175 @@ function Boss:draw()
         love.graphics.translate(lume.random(-shake, shake), lume.random(-shake, shake))
     end
 
-    -- glow
-    love.graphics.setColor(r * 0.15, g * 0.15, b * 0.15, 0.3)
-    love.graphics.circle('fill', 0, 0, Boss.WIDTH * 1.5)
-
-    -- main body: angular hull
-    love.graphics.setColor(r * 0.6, g * 0.6, b * 0.6, 0.9)
     local hw = Boss.WIDTH * 0.5
     local hh = Boss.HEIGHT * 0.5
-    love.graphics.polygon('fill',
-        0, -hh * 1.2,
-        hw * 1.1, -hh * 0.3,
-        hw * 0.9, hh * 0.6,
-        hw * 0.3, hh,
-        -hw * 0.3, hh,
-        -hw * 0.9, hh * 0.6,
-        -hw * 1.1, -hh * 0.3
-    )
 
-    -- inner detail
-    love.graphics.setColor(r, g, b, 0.7)
-    love.graphics.polygon('line',
-        0, -hh * 0.8,
-        hw * 0.7, -hh * 0.1,
-        hw * 0.5, hh * 0.4,
-        -hw * 0.5, hh * 0.4,
-        -hw * 0.7, -hh * 0.1
-    )
+    if self.zoneNum == 3 then
+        -- WARDEN: wide squat industrial hull
+        love.graphics.setColor(r * 0.15, g * 0.15, b * 0.15, 0.3)
+        love.graphics.circle('fill', 0, 0, Boss.WIDTH * 1.5)
 
-    -- eye/core
-    local eyePulse = math.sin(self.time * 6) * 0.15 + 0.85
-    love.graphics.setColor(r, g, b, eyePulse)
-    love.graphics.circle('fill', 0, -hh * 0.1, 8 * eyePulse)
-    love.graphics.setColor(1, 1, 1, eyePulse * 0.6)
-    love.graphics.circle('fill', 0, -hh * 0.1, 4)
+        local wardenHull = {
+            -hw * 1.2, -hh * 0.4,
+            -hw * 0.8, -hh * 0.8,
+            -hw * 0.3, -hh * 0.9,
+            hw * 0.3, -hh * 0.9,
+            hw * 0.8, -hh * 0.8,
+            hw * 1.2, -hh * 0.4,
+            hw * 1.1, hh * 0.5,
+            hw * 0.5, hh * 0.8,
+            -hw * 0.5, hh * 0.8,
+            -hw * 1.1, hh * 0.5,
+        }
+        love.graphics.setColor(r * 0.5, g * 0.5, b * 0.5, 0.9)
+        love.graphics.polygon('fill', wardenHull)
+        love.graphics.setColor(r, g, b, 0.7)
+        love.graphics.setLineWidth(1.5)
+        love.graphics.polygon('line', wardenHull)
+
+        -- riveted panel lines
+        love.graphics.setColor(r * 0.3, g * 0.3, b * 0.3, 0.4)
+        love.graphics.setLineWidth(0.5)
+        love.graphics.line(-hw * 0.8, -hh * 0.3, hw * 0.8, -hh * 0.3)
+        love.graphics.line(-hw * 0.9, hh * 0.1, hw * 0.9, hh * 0.1)
+        love.graphics.line(-hw * 0.7, hh * 0.5, hw * 0.7, hh * 0.5)
+
+        -- glowing reactor core
+        local corePulse = math.sin(self.time * 5) * 0.2 + 0.8
+        love.graphics.setBlendMode('add')
+        love.graphics.setColor(1.0, 0.5, 0.1, 0.3 * corePulse)
+        love.graphics.circle('fill', 0, 0, 12)
+        love.graphics.setColor(1.0, 0.7, 0.3, 0.6 * corePulse)
+        love.graphics.circle('fill', 0, 0, 6)
+        love.graphics.setBlendMode('alpha')
+
+        -- rotating outer ring of 8 bolts
+        for i = 1, 8 do
+            local a = self.spinAngle + (i - 1) * (math.pi * 2 / 8)
+            local ox = math.cos(a) * hw * 0.75
+            local oy = math.sin(a) * hh * 0.75
+            love.graphics.setColor(r, g, b, 0.6)
+            love.graphics.circle('fill', ox, oy, 3)
+        end
+
+    elseif self.zoneNum == 4 then
+        -- STORM KING: elongated vertical diamond with fins
+        love.graphics.setColor(r * 0.15, g * 0.15, b * 0.15, 0.3)
+        love.graphics.circle('fill', 0, 0, Boss.WIDTH * 1.5)
+
+        local diamondHull = {
+            0, -hh * 1.4,
+            hw * 0.5, -hh * 0.5,
+            hw * 0.6, 0,
+            hw * 0.5, hh * 0.5,
+            0, hh * 1.4,
+            -hw * 0.5, hh * 0.5,
+            -hw * 0.6, 0,
+            -hw * 0.5, -hh * 0.5,
+        }
+        love.graphics.setColor(r * 0.5, g * 0.5, b * 0.5, 0.9)
+        love.graphics.polygon('fill', diamondHull)
+        love.graphics.setColor(r, g, b, 0.7)
+        love.graphics.setLineWidth(1.5)
+        love.graphics.polygon('line', diamondHull)
+
+        -- horizontal fins
+        love.graphics.setColor(r * 0.4, g * 0.4, b * 0.4, 0.7)
+        love.graphics.polygon('fill', -hw * 1.3, -hh * 0.1, -hw * 0.6, -hh * 0.15, -hw * 0.6, hh * 0.15, -hw * 1.3, hh * 0.1)
+        love.graphics.polygon('fill', hw * 0.6, -hh * 0.15, hw * 1.3, -hh * 0.1, hw * 1.3, hh * 0.1, hw * 0.6, hh * 0.15)
+
+        -- lightning arcs between fins (3 jagged lines)
+        love.graphics.setBlendMode('add')
+        for arc = 1, 3 do
+            love.graphics.setColor(r, g, b, 0.6)
+            love.graphics.setLineWidth(1.5)
+            local startX = -hw * 1.2
+            local endX = hw * 1.2
+            local segments = 6
+            local lastX, lastY = startX, lume.random(-3, 3)
+            for seg = 1, segments do
+                local nx = startX + (endX - startX) * (seg / segments)
+                local ny = lume.random(-6, 6)
+                love.graphics.line(lastX, lastY, nx, ny)
+                lastX, lastY = nx, ny
+            end
+        end
+        love.graphics.setBlendMode('alpha')
+
+        -- core
+        local corePulse = math.sin(self.time * 6) * 0.15 + 0.85
+        love.graphics.setColor(r, g, b, corePulse)
+        love.graphics.circle('fill', 0, 0, 8 * corePulse)
+        love.graphics.setColor(1, 1, 1, corePulse * 0.6)
+        love.graphics.circle('fill', 0, 0, 4)
+
+    elseif self.zoneNum == 5 then
+        -- VOID LORD: central core + 8 tentacles
+        love.graphics.setColor(r * 0.15, g * 0.15, b * 0.15, 0.3)
+        love.graphics.circle('fill', 0, 0, Boss.WIDTH * 1.8)
+
+        -- concentric expanding void circles (purple additive)
+        love.graphics.setBlendMode('add')
+        for ring = 1, 4 do
+            local ringR = 20 + ring * 15 + math.sin(self.time * 2 + ring) * 5
+            love.graphics.setColor(r * 0.3, g * 0.1, b * 0.3, 0.08 / ring)
+            love.graphics.circle('line', 0, 0, ringR)
+        end
+        love.graphics.setBlendMode('alpha')
+
+        -- 8 tentacles (bezier-approximated curves)
+        for i = 1, 8 do
+            local baseAngle = self.spinAngle + (i - 1) * (math.pi * 2 / 8)
+            love.graphics.setColor(r * 0.6, g * 0.3, b * 0.6, 0.7)
+            love.graphics.setLineWidth(2)
+            local tentLen = hw * 1.2
+            local lastX, lastY = 0, 0
+            for seg = 1, 4 do
+                local t = seg / 4
+                local wave = math.sin(self.time * 3 + i + seg * 0.8) * 8 * t
+                local nx = math.cos(baseAngle) * tentLen * t + math.cos(baseAngle + math.pi / 2) * wave
+                local ny = math.sin(baseAngle) * tentLen * t + math.sin(baseAngle + math.pi / 2) * wave
+                love.graphics.line(lastX, lastY, nx, ny)
+                lastX, lastY = nx, ny
+            end
+        end
+
+        -- pulsing core
+        local corePulse = math.sin(self.time * (math.pi * 2 / 0.4)) * 0.2 + 0.8
+        love.graphics.setColor(r, g, b, 0.8)
+        love.graphics.circle('fill', 0, 0, 10 * corePulse)
+        love.graphics.setColor(1, 1, 1, 0.5 * corePulse)
+        love.graphics.circle('fill', 0, 0, 5 * corePulse)
+
+    else
+        -- fallback generic
+        love.graphics.setColor(r * 0.15, g * 0.15, b * 0.15, 0.3)
+        love.graphics.circle('fill', 0, 0, Boss.WIDTH * 1.5)
+
+        love.graphics.setColor(r * 0.6, g * 0.6, b * 0.6, 0.9)
+        love.graphics.polygon('fill',
+            0, -hh * 1.2,
+            hw * 1.1, -hh * 0.3,
+            hw * 0.9, hh * 0.6,
+            hw * 0.3, hh,
+            -hw * 0.3, hh,
+            -hw * 0.9, hh * 0.6,
+            -hw * 1.1, -hh * 0.3
+        )
+        love.graphics.setColor(r, g, b, 0.7)
+        love.graphics.polygon('line',
+            0, -hh * 0.8,
+            hw * 0.7, -hh * 0.1,
+            hw * 0.5, hh * 0.4,
+            -hw * 0.5, hh * 0.4,
+            -hw * 0.7, -hh * 0.1
+        )
+        local eyePulse = math.sin(self.time * 6) * 0.15 + 0.85
+        love.graphics.setColor(r, g, b, eyePulse)
+        love.graphics.circle('fill', 0, -hh * 0.1, 8 * eyePulse)
+        love.graphics.setColor(1, 1, 1, eyePulse * 0.6)
+        love.graphics.circle('fill', 0, -hh * 0.1, 4)
+    end
 
     -- phase indicators (spinning orbs)
     for i = 1, self.phase do
@@ -299,13 +473,11 @@ function Fighting:update(dt)
 
     if self.fireTimer <= 0 then
         if self.phase == 1 then
-            -- aimed shots
             self:fireAtPlayer(0)
             self:fireAtPlayer(0.15)
             self:fireAtPlayer(-0.15)
             self.fireTimer = 1.8 - self.zoneNum * 0.15
         elseif self.phase == 2 then
-            -- spiral + aimed
             self.burstCount = self.burstCount + 1
             if self.burstCount % 3 == 0 then
                 self:fireSpiral(8, self.spinAngle)
@@ -318,7 +490,6 @@ function Fighting:update(dt)
             end
             self.fireTimer = 1.2 - self.zoneNum * 0.1
         elseif self.phase == 3 then
-            -- rapid spiral + aimed barrage
             self:fireSpiral(12, self.spinAngle)
             self:fireAtPlayer(0)
             self:fireAtPlayer(0.1)

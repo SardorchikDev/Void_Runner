@@ -134,6 +134,76 @@ local function generateMenuSelect(sampleRate)
     return src
 end
 
+local function generateZoneSwell(sampleRate)
+    sampleRate = sampleRate or 44100
+    local duration = 3.0
+    local samples = math.floor(duration * sampleRate)
+    local data = love.sound.newSoundData(samples, sampleRate, 16, 1)
+    for i = 0, samples - 1 do
+        local t = i / sampleRate
+        local amp
+        if t < 1.0 then
+            amp = (t / 1.0) * 0.4
+        elseif t < 2.0 then
+            amp = 0.4
+        else
+            amp = 0.4 * math.max(0, 1 - (t - 2.0) / 1.0)
+        end
+        local s1 = math.sin(t * 55 * math.pi * 2)
+        local s2 = math.sin(t * 110 * math.pi * 2) * 0.7
+        local s3 = math.sin(t * 220 * math.pi * 2) * 0.4
+        data:setSample(i, (s1 + s2 + s3) * amp * 0.2)
+    end
+    local src = love.audio.newSource(data, 'static')
+    src:setVolume(0.2)
+    return src
+end
+
+local function generateComboAchieved(sampleRate)
+    sampleRate = sampleRate or 44100
+    local duration = 0.25
+    local samples = math.floor(duration * sampleRate)
+    local data = love.sound.newSoundData(samples, sampleRate, 16, 1)
+    local notes = {440, 554, 659, 880}
+    local noteLen = 0.06
+    for i = 0, samples - 1 do
+        local t = i / sampleRate
+        local noteIndex = math.min(#notes, math.floor(t / noteLen) + 1)
+        local localT = t - (noteIndex - 1) * noteLen
+        local env = math.max(0, 1 - localT / noteLen)
+        local tone = math.sin(t * notes[noteIndex] * math.pi * 2)
+        data:setSample(i, tone * env * 0.35)
+    end
+    local src = love.audio.newSource(data, 'static')
+    src:setVolume(0.2)
+    return src
+end
+
+local function generateBossPhaseShift(sampleRate)
+    sampleRate = sampleRate or 44100
+    local duration = 1.2
+    local samples = math.floor(duration * sampleRate)
+    local data = love.sound.newSoundData(samples, sampleRate, 16, 1)
+    for i = 0, samples - 1 do
+        local t = i / sampleRate
+        local env
+        if t < 0.05 then
+            env = t / 0.05
+        else
+            env = math.max(0, 1 - (t - 0.05) / (duration - 0.05))
+        end
+        local noise = (math.random() * 2 - 1) * 0.3
+        local rumble = math.sin(t * 40 * math.pi * 2) * 0.5
+        local sweepFreq = 200 + (t / duration) * 600
+        local sawPhase = (t * sweepFreq) % 1.0
+        local saw = (sawPhase * 2 - 1) * 0.4
+        data:setSample(i, (noise + rumble + saw) * env * 0.3)
+    end
+    local src = love.audio.newSource(data, 'static')
+    src:setVolume(0.25)
+    return src
+end
+
 function AudioManager:initialize()
     -- Volume settings (0.0 to 1.0)
     self.masterVolume = 1.0
@@ -196,12 +266,18 @@ function AudioManager:initialize()
     self.laserSound = generateLaserSound(44100)
     self.menuSelect = generateMenuSelect(44100)
 
+    -- New upgrade 15 sounds
+    self.zoneSwell = generateZoneSwell(44100)
+    self.comboAchieved = generateComboAchieved(44100)
+    self.bossPhaseShift = generateBossPhaseShift(44100)
+
     -- Track all sources for volume updates
     self.allSfx = {
         self.engineHum, self.thrustBurst, self.shieldClang,
         self.explosionSound, self.zoneTone, self.nearMissWhoosh,
         self.drone, self.pickupSound, self.dashSound,
-        self.laserSound, self.menuSelect
+        self.laserSound, self.menuSelect,
+        self.zoneSwell, self.comboAchieved, self.bossPhaseShift
     }
     self.baseVolumes = {}
     for _, src in ipairs(self.allSfx) do
@@ -362,6 +438,24 @@ function AudioManager:playMenuSelect()
     if not self.menuSelect then return end
     self.menuSelect:stop()
     self.menuSelect:play()
+end
+
+function AudioManager:playZoneSwell()
+    if not self.zoneSwell then return end
+    self.zoneSwell:stop()
+    self.zoneSwell:play()
+end
+
+function AudioManager:playComboAchieved()
+    if not self.comboAchieved then return end
+    self.comboAchieved:stop()
+    self.comboAchieved:play()
+end
+
+function AudioManager:playBossPhaseShift()
+    if not self.bossPhaseShift then return end
+    self.bossPhaseShift:stop()
+    self.bossPhaseShift:play()
 end
 
 function AudioManager:stopAll()

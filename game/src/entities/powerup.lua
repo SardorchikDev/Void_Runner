@@ -1,4 +1,4 @@
--- Powerup collectible with 6 types and despawn warning visual.
+-- Powerup collectible with 6 types, rotating rings, glow, and despawn warning.
 Powerup = class('Powerup', Entity)
 
 Powerup.static.TYPES = {
@@ -20,6 +20,8 @@ function Powerup:initialize(pos, typeIndex, velocity)
     self.maxLife = 8
     self.bobTime = 0
     self.rotation = 0
+    self.despawnRings = {}
+    self.despawnRingTimer = 0
 end
 
 function Powerup:update(dt)
@@ -28,6 +30,27 @@ function Powerup:update(dt)
     self.life = self.life - dt
     self.bobTime = self.bobTime + dt
     self.rotation = self.rotation + dt * 2
+
+    -- despawn warning rings
+    if self.life < 2 and self.life > 0 then
+        self.despawnRingTimer = self.despawnRingTimer + dt
+        if self.despawnRingTimer >= 0.3 then
+            self.despawnRingTimer = self.despawnRingTimer - 0.3
+            table.insert(self.despawnRings, {radius = 0, alpha = 0.6})
+        end
+    end
+
+    local i = 1
+    while i <= #self.despawnRings do
+        local ring = self.despawnRings[i]
+        ring.radius = ring.radius + dt * self.radius * 4
+        ring.alpha = ring.alpha - dt * 0.8
+        if ring.alpha <= 0 then
+            table.remove(self.despawnRings, i)
+        else
+            i = i + 1
+        end
+    end
 
     if self.life <= 0 then
         self:destroy()
@@ -49,9 +72,39 @@ function Powerup:draw()
 
     love.graphics.push()
     love.graphics.translate(self.pos.x, self.pos.y + bob)
+
+    -- despawn warning red rings
+    for _, ring in ipairs(self.despawnRings) do
+        love.graphics.setColor(1.0, 0.2, 0.1, ring.alpha * alpha)
+        love.graphics.setLineWidth(1.5)
+        love.graphics.circle('line', 0, 0, ring.radius)
+    end
+
+    -- outer rotating ring
+    love.graphics.push()
+    love.graphics.rotate(self.rotation * 1.5)
+    love.graphics.setColor(r, g, b, alpha * 0.4)
+    love.graphics.setLineWidth(1)
+    love.graphics.circle('line', 0, 0, self.radius * 1.6)
+    love.graphics.pop()
+
+    -- counter-rotating inner ring
+    love.graphics.push()
+    love.graphics.rotate(-self.rotation * 1.3)
+    love.graphics.setColor(r, g, b, alpha * 0.3)
+    love.graphics.setLineWidth(1)
+    love.graphics.circle('line', 0, 0, self.radius * 1.3)
+    love.graphics.pop()
+
     love.graphics.rotate(self.rotation)
 
-    -- glow
+    -- glow (2x scale, additive)
+    love.graphics.setBlendMode('add')
+    love.graphics.setColor(r * 0.3, g * 0.3, b * 0.3, alpha * 0.06)
+    love.graphics.circle('fill', 0, 0, self.radius * 2)
+    love.graphics.setBlendMode('alpha')
+
+    -- soft glow
     love.graphics.setColor(r * 0.3, g * 0.3, b * 0.3, alpha * 0.3)
     love.graphics.circle('fill', 0, 0, self.radius * 2)
 
