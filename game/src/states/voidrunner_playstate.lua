@@ -361,6 +361,14 @@ function VoidRunnerPlayState:update(dt)
     end
 
     self.audioManager:setEnginePitch(self.depth)
+    self.audioManager:update(rawDt)
+
+    -- Boss music crossfade
+    if self.activeBoss and not self.activeBoss:isDead() then
+        self.audioManager:startBossMusic()
+    else
+        self.audioManager:stopBossMusic()
+    end
 
     if CREATE_RECORDING then
         RECORDING:write(self.depth .. "\n")
@@ -880,6 +888,8 @@ function VoidRunnerPlayState:onPlayerDeath()
     self:resetMultiplier()
     self.audioManager:stopEngineHum()
     self.audioManager:stopMusic()
+    self.audioManager:stopBossMusic()
+    if self.audioManager.bossMusic then self.audioManager.bossMusic:stop() end
     self.audioManager:playExplosion()
 
     -- multi-stage death explosion

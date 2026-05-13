@@ -179,6 +179,49 @@ local function generateComboAchieved(sampleRate)
     return src
 end
 
+local function generateBossMusic(sampleRate)
+    sampleRate = sampleRate or 44100
+    local duration = 8.0
+    local samples = math.floor(duration * sampleRate)
+    local data = love.sound.newSoundData(samples, sampleRate, 16, 1)
+    for i = 0, samples - 1 do
+        local t = i / sampleRate
+        -- aggressive bass pulse (4-on-the-floor kick pattern at ~140 BPM)
+        local beatPeriod = 60.0 / 140.0
+        local beatPhase = (t % beatPeriod) / beatPeriod
+        local kick = math.sin(beatPhase * 50 * math.pi * 2) * math.max(0, 1 - beatPhase * 6) * 0.6
+        -- distorted sub bass oscillator
+        local subFreq = 36 + math.sin(t * 0.3 * math.pi * 2) * 6
+        local sub = math.sin(t * subFreq * math.pi * 2) * 0.25
+        -- aggressive sawtooth lead (menacing tone)
+        local leadFreq = 110 + math.sin(t * 0.5 * math.pi * 2) * 20
+        local sawPhase = (t * leadFreq) % 1.0
+        local saw = (sawPhase * 2 - 1) * 0.15
+        -- hi-hat noise on offbeats
+        local halfBeatPhase = (t % (beatPeriod * 0.5)) / (beatPeriod * 0.5)
+        local hihat = 0
+        if halfBeatPhase < 0.1 then
+            hihat = (math.random() * 2 - 1) * math.max(0, 1 - halfBeatPhase / 0.1) * 0.08
+        end
+        -- rising tension tone
+        local tensionLfo = math.sin(t * 0.15 * math.pi * 2) * 0.5 + 0.5
+        local tension = math.sin(t * 220 * math.pi * 2) * tensionLfo * 0.08
+        -- power chord stabs on every other beat
+        local stabPhase = (t % (beatPeriod * 2)) / (beatPeriod * 2)
+        local stab = 0
+        if stabPhase < 0.15 then
+            local stabEnv = math.max(0, 1 - stabPhase / 0.15)
+            stab = (math.sin(t * 73.4 * math.pi * 2) + math.sin(t * 110 * math.pi * 2) * 0.7) * stabEnv * 0.12
+        end
+        local sample = (kick + sub + saw + hihat + tension + stab) * 0.4
+        data:setSample(i, math.max(-1, math.min(1, sample)))
+    end
+    local src = love.audio.newSource(data, 'static')
+    src:setLooping(true)
+    src:setVolume(0.35)
+    return src
+end
+
 local function generateBossPhaseShift(sampleRate)
     sampleRate = sampleRate or 44100
     local duration = 1.2
@@ -270,6 +313,13 @@ function AudioManager:initialize()
     self.zoneSwell = generateZoneSwell(44100)
     self.comboAchieved = generateComboAchieved(44100)
     self.bossPhaseShift = generateBossPhaseShift(44100)
+
+    -- Boss music (aggressive procedural track)
+    self.bossMusic = generateBossMusic(44100)
+    self.bossMusic:setVolume(0)
+    self.bossMusicActive = false
+    self.bossMusicFade = 0
+    self.normalMusicBaseVol = 0.3
 
     -- Track all sources for volume updates
     self.allSfx = {
@@ -458,10 +508,47 @@ function AudioManager:playBossPhaseShift()
     self.bossPhaseShift:play()
 end
 
+function AudioManager:startBossMusic()
+    if self.bossMusicActive then return end
+    self.bossMusicActive = true
+    if self.bossMusic and not self.bossMusic:isPlaying() then
+        self.bossMusic:play()
+    end
+end
+
+function AudioManager:stopBossMusic()
+    self.bossMusicActive = false
+end
+
+function AudioManager:update(dt)
+    if not dt then return end
+    local fadeSpeed = 1.5
+    if self.bossMusicActive then
+        self.bossMusicFade = math.min(1, self.bossMusicFade + dt * fadeSpeed)
+    else
+        self.bossMusicFade = math.max(0, self.bossMusicFade - dt * fadeSpeed)
+    end
+
+    local master = self.masterVolume
+    if self.music then
+        local normalVol = self.normalMusicBaseVol * (1 - self.bossMusicFade * 0.7)
+        self.music:setVolume(self.musicVolume * master * normalVol)
+    end
+    if self.bossMusic then
+        self.bossMusic:setVolume(self.musicVolume * master * self.bossMusicFade * 0.35)
+        if self.bossMusicFade <= 0 and self.bossMusic:isPlaying() then
+            self.bossMusic:stop()
+        end
+    end
+end
+
 function AudioManager:stopAll()
     self:stopEngineHum()
     self:stopDrone()
     self:stopMusic()
+    self.bossMusicActive = false
+    self.bossMusicFade = 0
+    if self.bossMusic then self.bossMusic:stop() end
     if self.explosionSound then self.explosionSound:stop() end
     if self.zoneTone then self.zoneTone:stop() end
     if self.nearMissWhoosh then self.nearMissWhoosh:stop() end

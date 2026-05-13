@@ -171,7 +171,21 @@ function ParallaxStars:draw()
     local zb = self.zoneColor.b or 0
     local depthRedShift = (self.zoneDepthFactor or 0) * 0.08
 
-    -- galaxies (farthest back)
+    -- smooth ambient gradient wash behind everything
+    local gradAlpha = math.max(0.02, (self.zoneDepthFactor or 0) * 0.06)
+    if gradAlpha > 0.005 then
+        local left = self.left or 0
+        local top = self.top or 0
+        local right = self.right or love.graphics.getWidth()
+        local bottom = self.bottom or love.graphics.getHeight()
+        local midY = (top + bottom) * 0.5
+        love.graphics.setColor(zr * 0.12, zg * 0.12, zb * 0.12, gradAlpha)
+        love.graphics.rectangle('fill', left - 100, top - 100, (right - left) + 200, (bottom - top) + 200)
+        love.graphics.setColor(zr * 0.08, zg * 0.08, zb * 0.15, gradAlpha * 0.5)
+        love.graphics.rectangle('fill', left - 100, midY, (right - left) + 200, (bottom - midY) + 100)
+    end
+
+    -- galaxies (farthest back) — low segment count for performance
     for _, galaxy in ipairs(self.galaxies) do
         love.graphics.setColor(
             math.min(1, galaxy.color[1] + zr * 0.3),
@@ -183,7 +197,7 @@ function ParallaxStars:draw()
         love.graphics.translate(galaxy.pos:unpack())
         love.graphics.rotate(galaxy.rotation)
         for i = 3, 1, -1 do
-            love.graphics.ellipse('fill', 0, 0, galaxy.width * i / 3, galaxy.height * i / 3)
+            love.graphics.ellipse('fill', 0, 0, galaxy.width * i / 3, galaxy.height * i / 3, 16)
         end
         love.graphics.pop()
     end
@@ -199,7 +213,7 @@ function ParallaxStars:draw()
             love.graphics.push()
             love.graphics.translate(band.pos:unpack())
             love.graphics.rotate(band.rotation + sub.angleOffset)
-            love.graphics.ellipse('fill', 0, 0, band.width * sub.widthMul, band.height * sub.heightMul)
+            love.graphics.ellipse('fill', 0, 0, band.width * sub.widthMul, band.height * sub.heightMul, 16)
             love.graphics.pop()
         end
     end
@@ -214,14 +228,14 @@ function ParallaxStars:draw()
         love.graphics.push()
         love.graphics.translate(nebula.pos:unpack())
 
-        -- normal pass: 5 concentric ellipses
+        -- normal pass: 5 concentric ellipses (reduced segments for smoothness)
         for ei = 5, 1, -1 do
             local e = nebula.ellipses[ei]
             local frac = ei / 5
             love.graphics.setColor(nr, ng, nb, na * frac)
             love.graphics.push()
             love.graphics.rotate(nebula.rotation + e.angleOffset)
-            love.graphics.ellipse('fill', 0, 0, nebula.size * frac * e.scaleX, nebula.size * frac * e.scaleY)
+            love.graphics.ellipse('fill', 0, 0, nebula.size * frac * e.scaleX, nebula.size * frac * e.scaleY, 20)
             love.graphics.pop()
         end
 
@@ -233,7 +247,7 @@ function ParallaxStars:draw()
             love.graphics.setColor(nr * 1.5, ng * 1.2, nb * 0.8, na * frac * 0.5)
             love.graphics.push()
             love.graphics.rotate(nebula.rotation + e.angleOffset)
-            love.graphics.ellipse('fill', 0, 0, nebula.size * frac * 0.6 * e.scaleX, nebula.size * frac * 0.6 * e.scaleY)
+            love.graphics.ellipse('fill', 0, 0, nebula.size * frac * 0.6 * e.scaleX, nebula.size * frac * 0.6 * e.scaleY, 14)
             love.graphics.pop()
         end
         love.graphics.setBlendMode('alpha')
@@ -256,13 +270,13 @@ function ParallaxStars:draw()
             if star.isGiant then
                 local glowAlpha = alpha * 0.15
                 love.graphics.setColor(sr, sg, sb, glowAlpha)
-                love.graphics.circle('fill', star.pos.x, star.pos.y, star.size * 5)
+                love.graphics.circle('fill', star.pos.x, star.pos.y, star.size * 5, 12)
                 love.graphics.setColor(sr, sg, sb, glowAlpha * 1.5)
-                love.graphics.circle('fill', star.pos.x, star.pos.y, star.size * 2.5)
+                love.graphics.circle('fill', star.pos.x, star.pos.y, star.size * 2.5, 10)
             end
 
             love.graphics.setColor(sr, sg, sb, alpha)
-            love.graphics.circle('fill', star.pos.x, star.pos.y, star.size)
+            love.graphics.circle('fill', star.pos.x, star.pos.y, star.size, 8)
 
             -- cross flare for giant stars (cardinal + 45-degree diagonals)
             if star.isGiant and star.brightness > 0.8 then
@@ -286,13 +300,13 @@ function ParallaxStars:draw()
         local alpha = math.max(0, ss.life / ss.maxLife)
         love.graphics.setLineWidth(1.5)
         love.graphics.setColor(1, 1, 1.0, alpha)
-        love.graphics.circle('fill', ss.pos.x, ss.pos.y, 1.5)
-        for t = 1, 8 do
-            local trailAlpha = alpha * (1 - t / 8) * 0.4
+        love.graphics.circle('fill', ss.pos.x, ss.pos.y, 1.5, 6)
+        for t = 1, 6 do
+            local trailAlpha = alpha * (1 - t / 6) * 0.4
             local tx = ss.pos.x - ss.vel.x * t * 0.015
             local ty = ss.pos.y - ss.vel.y * t * 0.015
             love.graphics.setColor(0.7, 0.85, 1.0, trailAlpha)
-            love.graphics.circle('fill', tx, ty, 1.2 - t * 0.1)
+            love.graphics.circle('fill', tx, ty, 1.0 - t * 0.12, 6)
         end
     end
 
