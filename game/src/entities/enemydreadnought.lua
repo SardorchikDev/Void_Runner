@@ -28,7 +28,7 @@ function EnemyDreadnought:takeDamage(amount)
             self.gameState:addEntity(Explosion(self.pos:clone(), 50, {
                 core = {1.0, 0.8, 0.3}, mid = {1.0, 0.3, 0.1}, outer = {0.6, 0.1, 0.05}
             }))
-            self.gameState:onEnemyKilled('dreadnought')
+            self.gameState:onEnemyKilled('dreadnought', self.pos:clone())
         end
         self:destroy()
     end

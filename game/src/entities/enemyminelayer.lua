@@ -25,7 +25,7 @@ function EnemyMinelayer:takeDamage(amount)
             self.gameState:addEntity(Explosion(self.pos:clone(), 30, {
                 core = {1.0, 0.8, 0.2}, mid = {0.8, 0.5, 0.1}, outer = {0.5, 0.2, 0.05}
             }))
-            self.gameState:onEnemyKilled('minelayer')
+            self.gameState:onEnemyKilled('minelayer', self.pos:clone())
         end
         self:destroy()
     end

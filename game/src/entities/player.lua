@@ -228,7 +228,7 @@ function Player:update(dt)
             local bestDist = self.autoAimRange
             local bestTarget = nil
 
-            local targetTags = {'obstacle', 'enemy'}
+            local targetTags = {'obstacle', 'enemy', 'boss'}
             for _, tag in ipairs(targetTags) do
                 for _, ent in ipairs(self.gameState:getEntitiesByTag(tag)) do
                     if ent ~= self and not ent:isDead() then
@@ -660,7 +660,7 @@ function Player:manualFire()
         -- scan forward for nearest obstacle/enemy in narrow cone
         local forward = vector(math.sin(self.angle), -math.cos(self.angle))
         local bestDist = self.autoAimRange
-        local scanTags = {'obstacle', 'enemy'}
+        local scanTags = {'obstacle', 'enemy', 'boss'}
         for _, tag in ipairs(scanTags) do
             for _, ent in ipairs(self.gameState:getEntitiesByTag(tag)) do
                 if ent ~= self and not ent:isDead() then

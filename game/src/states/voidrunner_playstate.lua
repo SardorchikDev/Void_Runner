@@ -110,6 +110,26 @@ function VoidRunnerPlayState:reset()
 
     self.thrustCooldownDisplay = 0
 
+    -- boss system
+    self.activeBoss = nil
+    self.bossSpawned = {}
+    self.bossWarningTimer = 0
+    self.bossWarningActive = false
+    self.bossWarningZone = 0
+
+    -- combo system
+    self.combo = 0
+    self.comboTimer = 0
+    self.comboDuration = 3.0
+    self.maxCombo = 0
+    self.comboFlash = 0
+
+    -- score popups
+    self.scorePopups = {}
+
+    -- player trail (afterimage)
+    self.playerTrail = {}
+
     self.paused = false
     self.paused_time = 0
     self.paused_selected = 1
@@ -289,8 +309,10 @@ function VoidRunnerPlayState:update(dt)
                 self.currentZone = newZone
                 self.targetZoneColor = zoneData.color
                 self.zoneTransitionTimer = 2.0
-                self:addEntity(ZoneTransition(zoneName, zoneData.color))
+                self:addEntity(ZoneTransition(zoneName, zoneData.color, newZone))
                 self.audioManager:playZoneTone()
+                self.screenEffects:flash(zoneData.color.r, zoneData.color.g, zoneData.color.b, 0.2, 0.2)
+                self.screenEffects:chromaticAberration(0.4, 1.0)
 
                 if ANDROID or IOS then
                     if newZone == 3 then love.system.unlockAchievement(IDS.ACH_REACH_THE_SHIPS) end
@@ -301,7 +323,11 @@ function VoidRunnerPlayState:update(dt)
         end
 
         self:spawnEntities(dt)
+        self:spawnBoss()
         self:updateMultiplier(rawDt)
+        self:updateCombo(rawDt)
+        self:updateScorePopups(rawDt)
+        self:updatePlayerTrail(rawDt)
         self:updateCamera()
         self:updatePowerups(rawDt)
         self:despawnEntities()
@@ -431,6 +457,38 @@ function VoidRunnerPlayState:spawnEntities(dt)
     end
 end
 
+function VoidRunnerPlayState:spawnBoss()
+    if self.activeBoss and not self.activeBoss:isDead() then return end
+    self.activeBoss = nil
+
+    local bossZones = {
+        {zone = 3, depth = 1200},
+        {zone = 4, depth = 2500},
+        {zone = 5, depth = 4000},
+    }
+
+    for _, info in ipairs(bossZones) do
+        if self.currentZone >= info.zone and self.depth >= info.depth and not self.bossSpawned[info.zone] then
+            self.bossSpawned[info.zone] = true
+            self.bossWarningActive = true
+            self.bossWarningTimer = 2.0
+            self.bossWarningZone = info.zone
+
+            self.screenEffects:shake(8, 0.3)
+            self.screenEffects:chromaticAberration(0.5, 1.5)
+            self.audioManager:playZoneTone()
+
+            Timer.after(2.0, function()
+                self.bossWarningActive = false
+                local boss = Boss(info.zone)
+                self.activeBoss = boss
+                self:addEntity(boss)
+            end)
+            break
+        end
+    end
+end
+
 function VoidRunnerPlayState:updateMultiplier(dt)
     self.multiplierTimer = self.multiplierTimer + dt
     if self.multiplierTimer >= 8.0 then
@@ -453,25 +511,168 @@ function VoidRunnerPlayState:onPlayerDash()
     self:boostMultiplier(0.05)
 end
 
-function VoidRunnerPlayState:onEnemyKilled(enemyType)
+function VoidRunnerPlayState:onEnemyKilled(enemyType, pos)
     local scoreValues = {
         scout = 150,
         dreadnought = 500,
         minelayer = 250,
         swarm = 75,
+        boss = 2000,
     }
     local value = scoreValues[enemyType] or 100
-    self.score = self.score + value * self.multiplier
+    local earned = math.floor(value * self.multiplier)
+    self.score = self.score + earned
     self.killScore = self.killScore + value
+
+    -- combo
+    self.combo = self.combo + 1
+    self.comboTimer = self.comboDuration
+    self.comboFlash = 0.3
+    if self.combo > self.maxCombo then self.maxCombo = self.combo end
+    if self.combo >= 3 then
+        local comboBonus = math.floor(self.combo * 10 * self.multiplier)
+        self.score = self.score + comboBonus
+        earned = earned + comboBonus
+    end
+
+    -- score popup
+    local popPos = pos or (self.player and self.player.pos:clone()) or vector(0, 0)
+    self:addScorePopup(popPos, earned, self.combo)
     self:boostMultiplier(0.15)
 end
 
 function VoidRunnerPlayState:onLaserKill(target)
-    if target and target.tag == 'obstacle' then
-        local value = 50 * self.multiplier
-        self.score = self.score + value
-        self.killScore = self.killScore + 50
+    if target then
+        local value = 50
+        if target.tag == 'boss' then value = 100 end
+        local earned = math.floor(value * self.multiplier)
+        self.score = self.score + earned
+        self.killScore = self.killScore + value
         self:boostMultiplier(0.1)
+
+        self.combo = self.combo + 1
+        self.comboTimer = self.comboDuration
+        self.comboFlash = 0.3
+        if self.combo > self.maxCombo then self.maxCombo = self.combo end
+
+        self:addScorePopup(target.pos:clone(), earned, self.combo)
+    end
+end
+
+function VoidRunnerPlayState:addScorePopup(pos, value, combo)
+    table.insert(self.scorePopups, {
+        pos = pos:clone(),
+        value = value,
+        combo = combo or 0,
+        life = 1.0,
+        maxLife = 1.0,
+        vy = -60,
+    })
+end
+
+function VoidRunnerPlayState:updateScorePopups(dt)
+    local n = #self.scorePopups
+    local i = 1
+    while i <= n do
+        local p = self.scorePopups[i]
+        p.life = p.life - dt
+        p.pos.y = p.pos.y + p.vy * dt
+        p.vy = p.vy * 0.95
+        if p.life <= 0 then
+            self.scorePopups[i] = self.scorePopups[n]
+            self.scorePopups[n] = nil
+            n = n - 1
+        else
+            i = i + 1
+        end
+    end
+end
+
+function VoidRunnerPlayState:drawScorePopups()
+    local s = self.scale or 1
+    local font = self.mult_font
+    if font then love.graphics.setFont(font) end
+    for _, p in ipairs(self.scorePopups) do
+        local alpha = math.min(1, p.life / 0.3)
+        local sx, sy = self.cam:cameraCoords(p.pos.x, p.pos.y)
+        local scale = 1 + (1 - p.life / p.maxLife) * 0.3
+        if p.combo >= 5 then
+            love.graphics.setColor(1.0, 0.5, 0.1, alpha)
+        elseif p.combo >= 3 then
+            love.graphics.setColor(1.0, 0.85, 0.1, alpha)
+        else
+            love.graphics.setColor(0.7, 0.9, 1.0, alpha)
+        end
+        love.graphics.printf(string.format("+%d", p.value), sx - 40 * s, sy, 80 * s, "center")
+        if p.combo >= 3 then
+            love.graphics.setColor(1.0, 0.6, 0.1, alpha * 0.8)
+            love.graphics.printf(string.format("%dx COMBO", p.combo), sx - 40 * s, sy + 14 * s, 80 * s, "center")
+        end
+    end
+end
+
+function VoidRunnerPlayState:onBossDefeated(zoneNum)
+    local bonus = 2000 * zoneNum * self.multiplier
+    self.score = self.score + bonus
+    self.activeBoss = nil
+    self:addScorePopup(self.player and self.player.pos:clone() or vector(0, 0), math.floor(bonus), 0)
+    self:boostMultiplier(1.0)
+end
+
+function VoidRunnerPlayState:updateCombo(dt)
+    if self.combo > 0 then
+        self.comboTimer = self.comboTimer - dt
+        if self.comboTimer <= 0 then
+            self.combo = 0
+            self.comboTimer = 0
+        end
+    end
+    self.comboFlash = math.max(0, self.comboFlash - dt)
+end
+
+function VoidRunnerPlayState:updatePlayerTrail(dt)
+    if self.player and not self.player:isDead() then
+        table.insert(self.playerTrail, 1, {
+            x = self.player.pos.x,
+            y = self.player.pos.y,
+            angle = self.player.angle,
+            life = 0.3,
+            maxLife = 0.3
+        })
+    end
+    local n = #self.playerTrail
+    local i = 1
+    while i <= n do
+        self.playerTrail[i].life = self.playerTrail[i].life - dt
+        if self.playerTrail[i].life <= 0 then
+            self.playerTrail[i] = self.playerTrail[n]
+            self.playerTrail[n] = nil
+            n = n - 1
+        else
+            i = i + 1
+        end
+    end
+    while #self.playerTrail > 12 do
+        table.remove(self.playerTrail)
+    end
+end
+
+function VoidRunnerPlayState:drawPlayerTrail()
+    local pw = Player.WIDTH
+    local ph = Player.HEIGHT
+    for idx, t in ipairs(self.playerTrail) do
+        local alpha = (t.life / t.maxLife) * 0.15 * (1 - idx / 13)
+        love.graphics.setColor(0.3, 0.7, 1.0, alpha)
+        love.graphics.push()
+        love.graphics.translate(t.x, t.y)
+        love.graphics.rotate(t.angle)
+        love.graphics.polygon('fill',
+            0, -ph * 0.5,
+            pw * 0.5, ph * 0.3,
+            0, ph * 0.15,
+            -pw * 0.5, ph * 0.3
+        )
+        love.graphics.pop()
     end
 end
 
@@ -659,12 +860,28 @@ function VoidRunnerPlayState:onPlayerDeath()
     self.audioManager:stopEngineHum()
     self.audioManager:stopMusic()
     self.audioManager:playExplosion()
-    self:addEntity(Explosion(self.player.pos:clone(), 50))
-    self.screenEffects:shake(30, 0.5)
-    self.screenEffects:slowMotion(0.1, 0.5)
+
+    -- multi-stage death explosion
+    local deathPos = self.player.pos:clone()
+    self:addEntity(Explosion(deathPos, 60, {
+        core = {1.0, 1.0, 0.9}, mid = {1.0, 0.5, 0.2}, outer = {0.8, 0.1, 0.05}
+    }))
+    Timer.after(0.15, function()
+        self:addEntity(Explosion(deathPos + vector(lume.random(-20, 20), lume.random(-15, 15)), 35, {
+            core = {0.5, 0.8, 1.0}, mid = {0.2, 0.5, 1.0}, outer = {0.1, 0.2, 0.5}
+        }))
+    end)
+    Timer.after(0.3, function()
+        self:addEntity(Explosion(deathPos + vector(lume.random(-30, 30), lume.random(-20, 20)), 25))
+    end)
+
+    self.screenEffects:shake(40, 0.8)
+    self.screenEffects:slowMotion(0.05, 0.8)
+    self.screenEffects:chromaticAberration(1.5, 1.0)
+    self.screenEffects:flash(1, 0.4, 0.1, 0.4, 0.3)
     self.death_slowmo = true
     self.deathRevealStarted = true
-    self.deathRevealTimer = 0.5
+    self.deathRevealTimer = 0.8
 end
 
 function VoidRunnerPlayState:activateMagnetBurst()
@@ -765,7 +982,23 @@ function VoidRunnerPlayState:gamepadpressed(joystick, button)
 end
 
 function VoidRunnerPlayState:draw()
-    GameState.draw(self)
+    self:drawBackground()
+
+    self.entities = lume.sort(self.entities, GameState.defaultDrawOrder)
+
+    love.graphics.push()
+    if self.screenEffects then
+        self.screenEffects:apply()
+    end
+    self.cam:attach()
+    self:drawPlayerTrail()
+    for _, entity in ipairs(self.entities) do
+        if entity.visible then entity:draw() end
+    end
+    self.cam:detach()
+    love.graphics.pop()
+
+    self:overlay()
 end
 
 function VoidRunnerPlayState:drawBackground()
@@ -900,6 +1133,53 @@ function VoidRunnerPlayState:overlay()
     end
 
     self:drawRecordBurst()
+
+    -- === COMBO COUNTER ===
+    if self.combo >= 2 then
+        local comboAlpha = math.min(1, self.comboTimer / 0.5)
+        local comboScale = 1 + self.comboFlash * 2
+        love.graphics.setFont(self.best_font)
+        if self.combo >= 10 then
+            love.graphics.setColor(1.0, 0.3, 0.1, comboAlpha)
+        elseif self.combo >= 5 then
+            love.graphics.setColor(1.0, 0.65, 0.1, comboAlpha)
+        else
+            love.graphics.setColor(1.0, 0.85, 0.2, comboAlpha)
+        end
+        love.graphics.printf(string.format("%dx COMBO", self.combo), 0, h - 55 * s, w, "center")
+
+        -- combo timer bar
+        local cBarW = 80 * s
+        local cBarH = 3 * s
+        local cBarX = cx - cBarW / 2
+        local cBarY = h - 38 * s
+        love.graphics.setColor(0.3, 0.3, 0.4, 0.4)
+        love.graphics.rectangle('fill', cBarX, cBarY, cBarW, cBarH)
+        love.graphics.setColor(1.0, 0.7, 0.1, comboAlpha * 0.8)
+        love.graphics.rectangle('fill', cBarX, cBarY, cBarW * (self.comboTimer / self.comboDuration), cBarH)
+    end
+
+    -- === SCORE POPUPS ===
+    self:drawScorePopups()
+
+    -- === BOSS WARNING ===
+    if self.bossWarningActive then
+        local warnAlpha = math.sin(self.time * 8) * 0.3 + 0.7
+        love.graphics.setColor(1.0, 0.15, 0.15, warnAlpha * 0.15)
+        love.graphics.rectangle('fill', 0, 0, w, h)
+        love.graphics.setFont(self.time_font)
+        love.graphics.setColor(1.0, 0.2, 0.2, warnAlpha)
+        love.graphics.printf("WARNING", 0, h / 2 - 30 * s, w, "center")
+        love.graphics.setFont(self.instruction_font)
+        love.graphics.setColor(1.0, 0.4, 0.4, warnAlpha * 0.8)
+        local bossName = ({[3] = "WARDEN", [4] = "STORM KING", [5] = "VOID LORD"})[self.bossWarningZone] or "BOSS"
+        love.graphics.printf(bossName .. " APPROACHING", 0, h / 2 - 5 * s, w, "center")
+    end
+
+    -- === BOSS HEALTH BAR ===
+    if self.activeBoss and not self.activeBoss:isDead() and self.activeBoss.drawHealthBar then
+        self.activeBoss:drawHealthBar()
+    end
 
     -- === CORNER RETICLES (subtle ship HUD feel) ===
     love.graphics.setColor(0.25, 0.6, 1.0, 0.12)
@@ -1379,16 +1659,27 @@ function Dead:overlay()
     love.graphics.setFont(self.zone_font)
     love.graphics.printf(string.format("ZONE %d / %s", self.currentZone, zoneName), 0, cy + 20 * s, w, "center")
 
+    -- max combo and kills stats
+    if self.maxCombo >= 2 then
+        love.graphics.setColor(1.0, 0.7, 0.1, 0.7 * uiAlpha)
+        love.graphics.setFont(self.zone_font)
+        love.graphics.printf(string.format("MAX COMBO: %dx  |  KILLS: %d", self.maxCombo, math.floor(self.killScore / 50)), 0, cy + 38 * s, w, "center")
+    else
+        love.graphics.setColor(0.5, 0.6, 0.7, 0.5 * uiAlpha)
+        love.graphics.setFont(self.zone_font)
+        love.graphics.printf(string.format("KILLS: %d", math.floor(self.killScore / 50)), 0, cy + 38 * s, w, "center")
+    end
+
     local flavor = self.zoneManager:getFlavorText(self.currentZone)
     love.graphics.setColor(0.7, 0.7, 0.8, 0.6 * uiAlpha)
     love.graphics.setFont(self.instruction_font)
-    love.graphics.printf(flavor, 0, cy + 40 * s, w, "center")
+    love.graphics.printf(flavor, 0, cy + 56 * s, w, "center")
 
     local pulse = math.sin(self.dead_time * 3) * 0.12 + 0.88
     local btnW = 260 * s
     local btnH = 50 * s
     local bx = cx - btnW / 2
-    local by = cy + 70 * s
+    local by = cy + 80 * s
 
     love.graphics.setColor(0.05, 0.05, 0.12, 0.9 * uiAlpha)
     love.graphics.rectangle('fill', bx, by, btnW, btnH)
@@ -1420,7 +1711,7 @@ function Dead:mousepressed(x, y, button, istouch)
     local btnW = 260 * s
     local btnH = 50 * s
     local bx = cx - btnW / 2
-    local by = cy + 70 * s
+    local by = cy + 80 * s
     if x >= bx and x <= bx + btnW and y >= by and y <= by + btnH then
         self:startGame()
     end

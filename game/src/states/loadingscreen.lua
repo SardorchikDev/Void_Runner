@@ -31,10 +31,10 @@ function LoadingScreen:initialize()
 
     -- fake loading stages
     self.stages = {
-        "Collapsing spacetime...",
-        "Forming event horizon...",
-        "Calibrating singularity...",
-        "Bending light...",
+        "Initializing engine...",
+        "Loading starfield...",
+        "Calibrating sensors...",
+        "Spawning asteroids...",
         "Ready"
     }
     self.currentStage = 1
@@ -80,7 +80,7 @@ function LoadingScreen:update(dt)
     if self.progress >= 0.99 and not self.done then
         self.done = true
         Timer.after(0.3, function()
-            GameState.switchTo(SingularityMenu())
+            GameState.switchTo(VoidRunnerMainMenu())
         end)
     end
 end
@@ -111,11 +111,11 @@ function LoadingScreen:draw()
         local alpha = (1 - i / 4) * 0.12 * pulse
         love.graphics.setColor(0.15, 0.45, 1.0, alpha)
         love.graphics.setFont(self.title_font)
-        love.graphics.printf("SINGULARITY", offset, cy - 80 * s - offset * 0.2, w, "center")
+        love.graphics.printf("VOID RUNNER", offset, cy - 80 * s - offset * 0.2, w, "center")
     end
     love.graphics.setColor(0.35, 0.7, 1.0, 1)
     love.graphics.setFont(self.title_font)
-    love.graphics.printf("SINGULARITY", 0, cy - 80 * s, w, "center")
+    love.graphics.printf("VOID RUNNER", 0, cy - 80 * s, w, "center")
 
     -- progress bar bg
     local barW = 320 * s
@@ -154,7 +154,7 @@ function LoadingScreen:draw()
 
     -- controls hint
     love.graphics.setColor(0.3, 0.5, 0.7, 0.35)
-    love.graphics.printf("MOUSE TO MOVE  |  HOLD SPACE TO PULL  |  BECOME THE VOID", 0, h - 22 * s, w, "center")
+    love.graphics.printf("MOUSE TO MOVE  |  WASD TO DASH  |  RIGHT CLICK WARP", 0, h - 22 * s, w, "center")
 end
 
 function LoadingScreen:keypressed(key)
@@ -162,7 +162,7 @@ function LoadingScreen:keypressed(key)
         self.progress = 1
         self.done = true
         Timer.after(0.1, function()
-            GameState.switchTo(SingularityMenu())
+            GameState.switchTo(VoidRunnerMainMenu())
         end)
     end
 end
@@ -171,7 +171,7 @@ function LoadingScreen:mousepressed(x, y, button)
     self.progress = 1
     self.done = true
     Timer.after(0.1, function()
-        GameState.switchTo(SingularityMenu())
+        GameState.switchTo(VoidRunnerMainMenu())
     end)
 end
 
