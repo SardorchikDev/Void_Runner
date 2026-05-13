@@ -79,17 +79,70 @@ xdotool key Left   # Navigate to previous tab
 
 ## Two-Phase Test Strategy
 For comprehensive testing, use a two-phase approach:
-1. **Phase A (Temp Config)**: Test kill-dependent features (score popups, combo counter, death screen kills, player trail)
-2. **Phase B (Original Config)**: Test zone transitions, boss spawning, main menu high score, help menu
+1. **Phase A (Temp Config)**: Test kill-dependent features (score popups, combo counter, death screen kills, player trail, explosions, enemy/projectile visuals)
+2. **Phase B (Original Config)**: Test zone transitions, boss spawning, background enhancements, asteroid visuals, speed lines, FPS, depth progress bar, zone label animation
+
+## Visual Upgrade Test Checklist
+When testing visual upgrades, verify these specific elements:
+
+### Ship & Engine
+- Ship hull: 12-point arrowhead (nose, swept wings, nacelles, tail notch), 4-pass rendering
+- Engine glow: 3 concentric bloom circles per engine position (additive blend)
+- Cockpit: elongated teardrop near top of ship
+- Dash afterimages: cyan-to-purple gradient tint
+
+### Background
+- 14 nebula clouds (elliptical shapes with additive blend cores)
+- 420 stars across 5 parallax layers (5th layer at speed 1.4)
+- Giant stars have 4-point cross flares (diagonal lines)
+- Milky Way bands: 10 stacked ellipses
+- Shooting stars on ~1.5-4s timer
+
+### Enemies & Projectiles
+- Scout: fighter silhouette (fuselage, swept wings, tail fins), cyan outline, engine dot
+- Dreadnought: carrier silhouette (central spine, weapon pods, bridge, heat vents, nav lights)
+- Projectiles: elongated ellipses oriented along velocity (NOT circles), trailing ellipses
+- Boss (WARDEN): industrial hull, orange reactor core, rotating 8-bolt ring, sword icon in HP bar
+- Boss (STORM KING): diamond shape, lightning arcs, pulsing core
+- Boss (VOID LORD): tentacle bezier curves, concentric void circles
+
+### HUD
+- Score popups: "+N" floating upward with slight rotation (±5°)
+- Combo counter: "Nx COMBO" at bottom; glow background at 5+; orange tint at 3+
+- Depth progress bar: thin bar below depth counter, fills left-to-right
+- Zone label: slides in from x=-200 on zone change
+- Death screen: "MAX COMBO: Nx | KILLS: N"
+
+### Effects
+- Explosions: expanding ring(s) + 20% streak particles
+- Zone transitions: typing effect (character-by-character reveal), data streaks, flanking lines
+- Speed lines: appear at depth 400+ (lowered from 1000), purple chromatic pass, radial warp at 2000+
+- Asteroid lighting: surface normal lighting (bright/dark faces), rim glow (zone-colored)
+
+## FPS Performance Notes
+- FPS may drop significantly in Zone 3+ when WARDEN boss is active with asteroids
+- On VM environment: observed 52-64 FPS in Zone 1, 15 FPS in Zone 3 with boss
+- The 45 FPS target is for mid-range laptops, not VMs — VM results may be lower
+- F3 toggles the FPS counter; it might need two presses to appear if the first press registers during a frame skip
+- FPS on death screens is typically 39-43 (still rendering boss + particles)
 
 ## Key Files for Testing
 - `game/src/entities/zonemanager.lua` — Zone configs, spawn rates, scroll speeds
 - `game/src/entities/player.lua` — Auto-aim parameters, controls
 - `game/src/states/voidrunner_playstate.lua` — Combo system, score popups, death screen
 - `game/src/entities/boss.lua` — Boss entity, health bar, phases
-- `game/src/states/voidrunner_mainmenu.lua` — High score display
+- `game/src/states/voidrunner_mainmenu.lua` — High score display, title glow
 - `game/src/states/helpmenu.lua` — CODEX/help pages
-- `game/src/entities/backgrounds/zonetransition.lua` — Zone transition effects
+- `game/src/entities/backgrounds/zonetransition.lua` — Zone transition typing effect
+- `game/src/entities/backgrounds/parallaxstars.lua` — Background nebulas, stars, shooting stars
+- `game/src/entities/asteroid.lua` — Surface normal lighting, rim glow
+- `game/src/entities/speedlines.lua` — Speed line threshold, purple pass, radial warp
+- `game/src/entities/explosion.lua` — Double ring, streak particles
+- `game/src/entities/projectile.lua` — Plasma bolt shape
+- `game/src/entities/enemyscout.lua` — Fighter silhouette
+- `game/src/entities/engineglow.lua` — Concentric bloom circles
+- `game/src/entities/powerup.lua` — Rotating rings, despawn warning
+- `game/src/audiomanager.lua` — Synthesized sounds (untestable without audio hardware)
 
 ## Devin Secrets Needed
 None — the game runs fully locally with no external dependencies or API keys.
