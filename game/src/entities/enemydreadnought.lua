@@ -1,4 +1,4 @@
--- NEW: Large Zone 4+ enemy ship that fires red spread volleys.
+-- Large Zone 4+ enemy ship that fires red spread volleys.
 EnemyDreadnought = class('EnemyDreadnought', Entity)
 EnemyDreadnought:include(Stateful)
 
@@ -18,6 +18,7 @@ function EnemyDreadnought:initialize(duration, side)
     self.health = EnemyDreadnought.HEALTH
     self.radius = EnemyDreadnought.WIDTH
     self.entrySide = side or lume.randomchoice({'center', 'left', 'right'})
+    self.smokeParticles = {}
     self:gotoState('Entering')
 end
 
@@ -36,6 +37,29 @@ end
 
 function EnemyDreadnought:update(dt)
     Entity.update(self, dt)
+
+    -- damage smoke particles
+    if self.health <= EnemyDreadnought.HEALTH / 2 then
+        for i = 1, 2 do
+            table.insert(self.smokeParticles, {
+                x = lume.random(-EnemyDreadnought.WIDTH * 0.5, EnemyDreadnought.WIDTH * 0.5),
+                y = lume.random(-EnemyDreadnought.HEIGHT * 0.3, EnemyDreadnought.HEIGHT * 0.3),
+                size = lume.random(2, 4),
+                life = lume.random(0.3, 0.6),
+                maxLife = 0.6,
+                vy = lume.random(-20, -40),
+            })
+        end
+    end
+    for i = #self.smokeParticles, 1, -1 do
+        local p = self.smokeParticles[i]
+        p.y = p.y + p.vy * dt
+        p.life = p.life - dt
+        if p.life <= 0 then
+            table.remove(self.smokeParticles, i)
+        end
+    end
+
     if self.time > self.duration then
         self:destroy()
     end
@@ -51,41 +75,92 @@ function EnemyDreadnought:getPlayerPos()
 end
 
 function EnemyDreadnought:draw()
-    local r, g, b = 1.0, 0.2, 0.2
+    local W = EnemyDreadnought.WIDTH
+    local H = EnemyDreadnought.HEIGHT
+    local t = self.time or 0
+
     love.graphics.push()
     love.graphics.translate(self.pos:unpack())
 
-    love.graphics.setColor(r * 0.15, g * 0.15, b * 0.15, 0.4)
-    love.graphics.polygon('fill',
-        -EnemyDreadnought.WIDTH * 0.8, -EnemyDreadnought.HEIGHT * 0.5,
-        EnemyDreadnought.WIDTH * 0.8, -EnemyDreadnought.HEIGHT * 0.5,
-        EnemyDreadnought.WIDTH * 0.5, EnemyDreadnought.HEIGHT * 0.5,
-        0, EnemyDreadnought.HEIGHT * 0.7,
-        -EnemyDreadnought.WIDTH * 0.5, EnemyDreadnought.HEIGHT * 0.5)
+    -- central spine
+    love.graphics.setColor(0.12, 0.06, 0.06, 0.8)
+    love.graphics.polygon('fill', -W * 0.15, -H * 0.55, W * 0.15, -H * 0.55, W * 0.15, H * 0.55, -W * 0.15, H * 0.55)
 
-    love.graphics.setColor(r * 0.4, g * 0.4, b * 0.4, 0.6)
-    love.graphics.polygon('fill',
-        -EnemyDreadnought.WIDTH * 0.65, -EnemyDreadnought.HEIGHT * 0.4,
-        EnemyDreadnought.WIDTH * 0.65, -EnemyDreadnought.HEIGHT * 0.4,
-        EnemyDreadnought.WIDTH * 0.4, EnemyDreadnought.HEIGHT * 0.4,
-        0, EnemyDreadnought.HEIGHT * 0.55,
-        -EnemyDreadnought.WIDTH * 0.4, EnemyDreadnought.HEIGHT * 0.4)
+    -- port/starboard weapon pods
+    love.graphics.setColor(0.15, 0.08, 0.08, 0.7)
+    love.graphics.polygon('fill', -W * 0.55, -H * 0.2, -W * 0.3, -H * 0.2, -W * 0.3, H * 0.4, -W * 0.55, H * 0.4)
+    love.graphics.polygon('fill', W * 0.3, -H * 0.2, W * 0.55, -H * 0.2, W * 0.55, H * 0.4, W * 0.3, H * 0.4)
 
-    love.graphics.setColor(r, g, b, 0.9)
-    love.graphics.polygon('line',
-        -EnemyDreadnought.WIDTH * 0.5, -EnemyDreadnought.HEIGHT * 0.3,
-        EnemyDreadnought.WIDTH * 0.5, -EnemyDreadnought.HEIGHT * 0.3,
-        EnemyDreadnought.WIDTH * 0.3, EnemyDreadnought.HEIGHT * 0.3,
-        0, EnemyDreadnought.HEIGHT * 0.4,
-        -EnemyDreadnought.WIDTH * 0.3, EnemyDreadnought.HEIGHT * 0.3)
+    -- bridge superstructure (trapezoid at top)
+    love.graphics.setColor(0.18, 0.1, 0.1, 0.9)
+    love.graphics.polygon('fill', -W * 0.1, -H * 0.55, W * 0.1, -H * 0.55, W * 0.2, -H * 0.35, -W * 0.2, -H * 0.35)
 
-    love.graphics.setColor(1.0, 0.3, 0.1, 0.6)
-    love.graphics.circle('fill', -EnemyDreadnought.WIDTH * 0.3, EnemyDreadnought.HEIGHT * 0.45, 4)
-    love.graphics.circle('fill', EnemyDreadnought.WIDTH * 0.3, EnemyDreadnought.HEIGHT * 0.45, 4)
-    love.graphics.circle('fill', 0, EnemyDreadnought.HEIGHT * 0.55, 3)
+    -- hangar bay (dark rectangle at bottom)
+    love.graphics.setColor(0.04, 0.02, 0.02, 0.8)
+    love.graphics.polygon('fill', -W * 0.12, H * 0.35, W * 0.12, H * 0.35, W * 0.12, H * 0.55, -W * 0.12, H * 0.55)
 
+    -- sensor array (3 circles at top of bridge)
+    love.graphics.setColor(0.8, 0.3, 0.2, 0.6)
+    love.graphics.circle('fill', -W * 0.08, -H * 0.5, 2)
+    love.graphics.circle('fill', 0, -H * 0.55, 2.5)
+    love.graphics.circle('fill', W * 0.08, -H * 0.5, 2)
+
+    -- hull plating lines
+    love.graphics.setColor(0.06, 0.03, 0.03, 0.5)
+    love.graphics.setLineWidth(0.5)
+    for i = 1, 7 do
+        local y = -H * 0.4 + (i / 8) * H * 0.8
+        love.graphics.line(-W * 0.5, y, W * 0.5, y)
+    end
+
+    -- edge outlines
+    love.graphics.setColor(1.0, 0.2, 0.2, 0.9)
+    love.graphics.setLineWidth(1)
+    love.graphics.polygon('line', -W * 0.15, -H * 0.55, W * 0.15, -H * 0.55, W * 0.15, H * 0.55, -W * 0.15, H * 0.55)
+    love.graphics.polygon('line', -W * 0.55, -H * 0.2, -W * 0.3, -H * 0.2, -W * 0.3, H * 0.4, -W * 0.55, H * 0.4)
+    love.graphics.polygon('line', W * 0.3, -H * 0.2, W * 0.55, -H * 0.2, W * 0.55, H * 0.4, W * 0.3, H * 0.4)
+
+    -- heat vents (pulsing orange circles)
+    local ventPositions = {
+        {x = -W * 0.42, y = H * 0.0, offset = 0},
+        {x = -W * 0.42, y = H * 0.2, offset = 1.2},
+        {x = W * 0.42, y = H * 0.0, offset = 2.4},
+        {x = W * 0.42, y = H * 0.2, offset = 3.6},
+        {x = -W * 0.42, y = -H * 0.1, offset = 4.8},
+        {x = W * 0.42, y = -H * 0.1, offset = 0.6},
+    }
+    for _, v in ipairs(ventPositions) do
+        local pulse = math.sin(t * 4 + v.offset) * 0.3 + 0.7
+        love.graphics.setColor(1.0, 0.4, 0.1, 0.4 * pulse)
+        love.graphics.circle('fill', v.x, v.y, 2.5 * pulse)
+    end
+
+    -- navigation lights (blinking red/green at wingtips)
+    local redBlink = math.sin(t * (math.pi * 2 / 0.8)) > 0 and 0.8 or 0.1
+    local greenBlink = math.sin(t * (math.pi * 2 / 1.1)) > 0 and 0.8 or 0.1
+    love.graphics.setColor(1.0, 0.1, 0.1, redBlink)
+    love.graphics.circle('fill', -W * 0.55, -H * 0.2, 2)
+    love.graphics.setColor(0.1, 1.0, 0.2, greenBlink)
+    love.graphics.circle('fill', W * 0.55, -H * 0.2, 2)
+
+    -- cockpit
     love.graphics.setColor(1, 1, 1, 0.8)
-    love.graphics.circle('fill', 0, -EnemyDreadnought.HEIGHT * 0.1, 2)
+    love.graphics.circle('fill', 0, -H * 0.45, 2)
+
+    -- engines
+    love.graphics.setBlendMode('add')
+    love.graphics.setColor(1.0, 0.3, 0.1, 0.5)
+    love.graphics.circle('fill', -W * 0.3, H * 0.45, 3)
+    love.graphics.circle('fill', W * 0.3, H * 0.45, 3)
+    love.graphics.circle('fill', 0, H * 0.55, 2.5)
+    love.graphics.setBlendMode('alpha')
+
+    -- damage smoke
+    for _, p in ipairs(self.smokeParticles) do
+        local a = math.max(0, p.life / p.maxLife) * 0.4
+        love.graphics.setColor(0.3, 0.3, 0.3, a)
+        love.graphics.circle('fill', p.x, p.y, p.size)
+    end
 
     love.graphics.pop()
 end

@@ -440,6 +440,9 @@ function Player:drawBody()
         r, g, b = 0.5, 0.9, 1.0
     end
 
+    local W = Player.WIDTH
+    local H = Player.HEIGHT
+
     love.graphics.push()
     love.graphics.translate(self.pos:unpack())
     love.graphics.rotate(self.angle)
@@ -449,76 +452,74 @@ function Player:drawBody()
     -- engine glow / aura
     if isDashing then
         love.graphics.setColor(0.3, 0.8, 1.0, 0.15)
-        love.graphics.circle('fill', 0, 0, Player.HEIGHT * 1.5)
+        love.graphics.circle('fill', 0, 0, H * 1.5)
         love.graphics.setColor(0.4, 0.9, 1.0, 0.25)
-        love.graphics.circle('fill', 0, 0, Player.HEIGHT * 1.1)
+        love.graphics.circle('fill', 0, 0, H * 1.1)
     end
 
     if timeWarpGlow then
         love.graphics.setColor(0.7, 0.9, 1.0, 0.22)
-        love.graphics.circle('fill', 0, 0, Player.HEIGHT * 1.15)
+        love.graphics.circle('fill', 0, 0, H * 1.15)
     end
 
-    -- engine exhaust flare
-    local enginePulse = math.sin(self.wobbleTime * 8) * 0.15 + 0.85
-    love.graphics.setColor(r * 0.4, g * 0.6, b * 0.9, 0.4 * enginePulse * dashAlpha)
-    love.graphics.circle('fill', 0, Player.HEIGHT * 0.45, 4 * enginePulse)
-    love.graphics.setColor(r * 0.6, g * 0.8, b, 0.6 * enginePulse * dashAlpha)
-    love.graphics.circle('fill', 0, Player.HEIGHT * 0.45, 2.5 * enginePulse)
+    -- nacelle engine glows (pulsing circles)
+    local wobble = math.sin(self.wobbleTime * 6)
+    local nacRad = 2 + wobble * 1
+    -- left nacelle
+    love.graphics.setColor(0.3, 0.7, 1.0, 0.6 * dashAlpha)
+    love.graphics.circle('fill', -W * 0.45, H * 0.55, nacRad)
+    -- right nacelle
+    love.graphics.circle('fill', W * 0.45, H * 0.55, nacRad)
+    -- center engine additive glow
+    love.graphics.setBlendMode('add')
+    love.graphics.setColor(0.3, 0.7, 1.0, 0.35 * dashAlpha)
+    love.graphics.circle('fill', 0, H * 0.45, 3.5)
+    love.graphics.setBlendMode('alpha')
 
-    -- ship shadow layer
-    love.graphics.setColor(r * 0.15, g * 0.15, b * 0.15, 0.5 * dashAlpha)
-    love.graphics.polygon('fill',
-        -Player.WIDTH * 0.7, Player.HEIGHT * 0.35,
-        -Player.WIDTH * 0.25, -Player.HEIGHT * 0.25,
-        0, -Player.HEIGHT * 0.7,
-        Player.WIDTH * 0.25, -Player.HEIGHT * 0.25,
-        Player.WIDTH * 0.7, Player.HEIGHT * 0.35,
-        Player.WIDTH * 0.35, Player.HEIGHT * 0.55,
-        0, Player.HEIGHT * 0.35,
-        -Player.WIDTH * 0.35, Player.HEIGHT * 0.55)
+    -- 12-point arrowhead hull
+    local hull = {
+        0, -H * 0.6,                -- nose
+        -W * 0.15, -H * 0.3,        -- upper left shoulder
+        -W * 0.35, -H * 0.05,       -- mid left
+        -W * 0.65, H * 0.2,         -- left wingtip
+        -W * 0.5,  H * 0.35,        -- left wing inner
+        -W * 0.45, H * 0.55,        -- left nacelle
+        -W * 0.15, H * 0.45,        -- left tail
+        0, H * 0.35,                -- tail notch
+        W * 0.15, H * 0.45,         -- right tail
+        W * 0.45, H * 0.55,         -- right nacelle
+        W * 0.5,  H * 0.35,         -- right wing inner
+        W * 0.65, H * 0.2,          -- right wingtip
+        W * 0.35, -H * 0.05,        -- mid right
+        W * 0.15, -H * 0.3,         -- upper right shoulder
+    }
 
-    -- mid glow line
-    love.graphics.setColor(r * 0.3, g * 0.5, b * 0.7, 0.4 * dashAlpha)
-    love.graphics.setLineWidth(3)
-    love.graphics.polygon('line',
-        -Player.WIDTH * 0.55, Player.HEIGHT * 0.25,
-        -Player.WIDTH * 0.2, -Player.HEIGHT * 0.15,
-        0, -Player.HEIGHT * 0.55,
-        Player.WIDTH * 0.2, -Player.HEIGHT * 0.15,
-        Player.WIDTH * 0.55, Player.HEIGHT * 0.25,
-        Player.WIDTH * 0.25, Player.HEIGHT * 0.45,
-        0, Player.HEIGHT * 0.25,
-        -Player.WIDTH * 0.25, Player.HEIGHT * 0.45)
+    -- Pass 1: dark fill
+    love.graphics.setColor(0.05, 0.15, 0.3, 0.8 * dashAlpha)
+    love.graphics.polygon('fill', hull)
 
-    -- body fill
-    love.graphics.setColor(r * 0.2, g * 0.4, b * 0.6, 0.6 * dashAlpha)
-    love.graphics.polygon('fill',
-        -Player.WIDTH * 0.4, Player.HEIGHT * 0.18,
-        -Player.WIDTH * 0.15, -Player.HEIGHT * 0.1,
-        0, -Player.HEIGHT * 0.4,
-        Player.WIDTH * 0.15, -Player.HEIGHT * 0.1,
-        Player.WIDTH * 0.4, Player.HEIGHT * 0.18,
-        Player.WIDTH * 0.15, Player.HEIGHT * 0.32,
-        0, Player.HEIGHT * 0.18,
-        -Player.WIDTH * 0.15, Player.HEIGHT * 0.32)
+    -- Pass 2: mid-tone fill (slightly smaller via push/scale)
+    love.graphics.push()
+    love.graphics.scale(0.85, 0.85)
+    love.graphics.setColor(0.12, 0.35, 0.6, 0.6 * dashAlpha)
+    love.graphics.polygon('fill', hull)
+    love.graphics.pop()
 
-    -- highlight outline
-    love.graphics.setColor(r, g, b, 0.9 * dashAlpha)
+    -- Pass 3: bright edge outline
+    love.graphics.setColor(0.35, 0.8, 1.0, 0.9 * dashAlpha)
     love.graphics.setLineWidth(1.5)
-    love.graphics.polygon('line',
-        -Player.WIDTH * 0.3, Player.HEIGHT * 0.12,
-        -Player.WIDTH * 0.1, -Player.HEIGHT * 0.05,
-        0, -Player.HEIGHT * 0.3,
-        Player.WIDTH * 0.1, -Player.HEIGHT * 0.05,
-        Player.WIDTH * 0.3, Player.HEIGHT * 0.12,
-        Player.WIDTH * 0.1, Player.HEIGHT * 0.22,
-        0, Player.HEIGHT * 0.12,
-        -Player.WIDTH * 0.1, Player.HEIGHT * 0.22)
+    love.graphics.polygon('line', hull)
 
-    -- cockpit / core light
-    love.graphics.setColor(1, 1, 1, 0.8 * dashAlpha)
-    love.graphics.circle('fill', 0, -Player.HEIGHT * 0.15, 2)
+    -- Pass 4: white hot core spine
+    love.graphics.setColor(1, 1, 1, 0.6 * dashAlpha)
+    love.graphics.setLineWidth(0.8)
+    love.graphics.line(0, -H * 0.6, 0, H * 0.3)
+
+    -- cockpit: elongated teardrop ellipse
+    love.graphics.setColor(0.3, 0.6, 0.9, 0.1 * dashAlpha)
+    love.graphics.circle('fill', 0, -H * 0.25, 8)
+    love.graphics.setColor(0.6, 0.9, 1.0, 0.9 * dashAlpha)
+    love.graphics.ellipse('fill', 0, -H * 0.25, 3, 5)
 
     -- dash energy ring
     if isDashing then
@@ -526,7 +527,7 @@ function Player:drawBody()
         local ringAlpha = (1 - ringT) * 0.5
         love.graphics.setColor(r, g, b, ringAlpha)
         love.graphics.setLineWidth(2)
-        love.graphics.circle('line', 0, 0, Player.HEIGHT * (0.8 + ringT * 0.5))
+        love.graphics.circle('line', 0, 0, H * (0.8 + ringT * 0.5))
     end
 
     love.graphics.pop()
@@ -535,36 +536,44 @@ end
 function Player:draw()
     Entity.draw(self)
 
-    -- dash afterimages (stay in place, fade out)
-    for _, im in ipairs(self.dashAfterimages) do
-        local alpha = math.max(0, im.life / im.maxLife) * 0.35
+    -- dash afterimages (stay in place, fade out with cyan-to-purple gradient)
+    local W = Player.WIDTH
+    local H = Player.HEIGHT
+    local imCount = #self.dashAfterimages
+    for idx, im in ipairs(self.dashAfterimages) do
+        local alpha = math.max(0, im.life / im.maxLife) * 0.5
+        local ageFrac = 1 - (idx / math.max(imCount, 1))
+        local cr = lume.lerp(0.3, 0.6, ageFrac)
+        local cg = lume.lerp(0.9, 0.2, ageFrac)
+        local cb = lume.lerp(1.0, 1.0, ageFrac)
+
         love.graphics.push()
         love.graphics.translate(im.pos:unpack())
         love.graphics.rotate(im.angle)
 
-        -- ghost silhouette
-        love.graphics.setColor(0.3, 0.75, 1.0, alpha * 0.2)
-        love.graphics.polygon('fill',
-            -Player.WIDTH * 0.4, Player.HEIGHT * 0.18,
-            -Player.WIDTH * 0.15, -Player.HEIGHT * 0.1,
-            0, -Player.HEIGHT * 0.4,
-            Player.WIDTH * 0.15, -Player.HEIGHT * 0.1,
-            Player.WIDTH * 0.4, Player.HEIGHT * 0.18,
-            Player.WIDTH * 0.15, Player.HEIGHT * 0.32,
-            0, Player.HEIGHT * 0.18,
-            -Player.WIDTH * 0.15, Player.HEIGHT * 0.32)
+        local hull = {
+            0, -H * 0.6,
+            -W * 0.15, -H * 0.3,
+            -W * 0.35, -H * 0.05,
+            -W * 0.65, H * 0.2,
+            -W * 0.5,  H * 0.35,
+            -W * 0.45, H * 0.55,
+            -W * 0.15, H * 0.45,
+            0, H * 0.35,
+            W * 0.15, H * 0.45,
+            W * 0.45, H * 0.55,
+            W * 0.5,  H * 0.35,
+            W * 0.65, H * 0.2,
+            W * 0.35, -H * 0.05,
+            W * 0.15, -H * 0.3,
+        }
 
-        love.graphics.setColor(0.4, 0.85, 1.0, alpha * 0.5)
+        love.graphics.setColor(cr, cg, cb, alpha * 0.25)
+        love.graphics.polygon('fill', hull)
+
+        love.graphics.setColor(cr, cg, cb, alpha * 0.5)
         love.graphics.setLineWidth(1)
-        love.graphics.polygon('line',
-            -Player.WIDTH * 0.3, Player.HEIGHT * 0.12,
-            -Player.WIDTH * 0.1, -Player.HEIGHT * 0.05,
-            0, -Player.HEIGHT * 0.3,
-            Player.WIDTH * 0.1, -Player.HEIGHT * 0.05,
-            Player.WIDTH * 0.3, Player.HEIGHT * 0.12,
-            Player.WIDTH * 0.1, Player.HEIGHT * 0.22,
-            0, Player.HEIGHT * 0.12,
-            -Player.WIDTH * 0.1, Player.HEIGHT * 0.22)
+        love.graphics.polygon('line', hull)
 
         love.graphics.pop()
     end

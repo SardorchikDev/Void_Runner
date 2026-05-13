@@ -226,12 +226,20 @@ function VoidRunnerMainMenu:draw()
     love.graphics.setColor(0.08, 0.2, 0.45, 0.12)
     love.graphics.rectangle('line', px + 2, py + 2, panelW - 4, panelH - 4)
 
-    -- title glow
-    love.graphics.setColor(0.15, 0.45, 1.0, 0.2 * pulse)
+    -- title glow (3-pass depth stack)
     love.graphics.setFont(self.title_font)
-    love.graphics.printf("VOID RUNNER", 0, py + 28 * s, w, "center")
-    love.graphics.setColor(0.35, 0.75, 1.0, 0.9 * pulse)
+    love.graphics.setColor(0.05, 0.15, 0.4, 0.3 * pulse)
+    love.graphics.printf("VOID RUNNER", 3 * s, py + 29 * s, w, "center")
+    love.graphics.setColor(0.1, 0.3, 0.7, 0.5 * pulse)
+    love.graphics.printf("VOID RUNNER", 1 * s, py + 27 * s, w, "center")
+    love.graphics.setColor(0.45, 0.85, 1.0, 1.0 * pulse)
     love.graphics.printf("VOID RUNNER", 0, py + 26 * s, w, "center")
+
+    -- pulsing ring behind subtitle
+    local ringRadius = 40 + (math.sin(self.time * math.pi) * 10)
+    love.graphics.setColor(0.2, 0.5, 1.0, 0.06)
+    love.graphics.setLineWidth(1 * s)
+    love.graphics.circle('line', cx, py + 100 * s, ringRadius * s)
 
     -- subtitle
     love.graphics.setFont(self.small_font)
@@ -262,6 +270,9 @@ function VoidRunnerMainMenu:draw()
             love.graphics.setColor(r, g, b, 0.7)
             love.graphics.setLineWidth(2 * s)
             love.graphics.rectangle('line', bx - 1, by - 1, btnW + 2, btnH + 2)
+            -- left accent bar
+            love.graphics.setColor(r, g, b, 0.9)
+            love.graphics.rectangle('fill', bx - 4 * s, by + 2, 2 * s, btnH - 4)
         end
 
         love.graphics.setFont(self.btn_font)

@@ -144,6 +144,8 @@ function VoidRunnerPlayState:reset()
     self.ignore_touch = {}
     self.active_touches = {}
     self.recordBurstParticles = {}
+    self.depthFlash = 0
+    self.zoneLabelX = -200
 
     if self.screenEffects then
         self.screenEffects = ScreenEffects()
@@ -311,6 +313,9 @@ function VoidRunnerPlayState:update(dt)
                 self.zoneTransitionTimer = 2.0
                 self:addEntity(ZoneTransition(zoneName, zoneData.color, newZone))
                 self.audioManager:playZoneTone()
+                self.audioManager:playZoneSwell()
+                self.depthFlash = 0.2
+                self.zoneLabelX = -200
                 self.screenEffects:flash(zoneData.color.r, zoneData.color.g, zoneData.color.b, 0.2, 0.2)
                 self.screenEffects:chromaticAberration(0.4, 1.0)
 
@@ -328,6 +333,12 @@ function VoidRunnerPlayState:update(dt)
         self:updateCombo(rawDt)
         self:updateScorePopups(rawDt)
         self:updatePlayerTrail(rawDt)
+
+        if self.depthFlash > 0 then
+            self.depthFlash = self.depthFlash - rawDt
+        end
+        local targetLabelX = 14
+        self.zoneLabelX = lume.lerp(self.zoneLabelX, targetLabelX, math.min(1, rawDt * 6))
         self:updateCamera()
         self:updatePowerups(rawDt)
         self:despawnEntities()
@@ -529,6 +540,9 @@ function VoidRunnerPlayState:onEnemyKilled(enemyType, pos)
     self.comboTimer = self.comboDuration
     self.comboFlash = 0.3
     if self.combo > self.maxCombo then self.maxCombo = self.combo end
+    if self.combo > 0 and self.combo % 5 == 0 and self.audioManager then
+        self.audioManager:playComboAchieved()
+    end
     if self.combo >= 3 then
         local comboBonus = math.floor(self.combo * 10 * self.multiplier)
         self.score = self.score + comboBonus
@@ -567,6 +581,7 @@ function VoidRunnerPlayState:addScorePopup(pos, value, combo)
         life = 1.0,
         maxLife = 1.0,
         vy = -60,
+        rotation = lume.random(-0.09, 0.09),
     })
 end
 
@@ -595,19 +610,25 @@ function VoidRunnerPlayState:drawScorePopups()
     for _, p in ipairs(self.scorePopups) do
         local alpha = math.min(1, p.life / 0.3)
         local sx, sy = self.cam:cameraCoords(p.pos.x, p.pos.y)
-        local scale = 1 + (1 - p.life / p.maxLife) * 0.3
+        local isComboKill = p.combo >= 3
+        local drawScale = isComboKill and 1.3 or 1.0
         if p.combo >= 5 then
             love.graphics.setColor(1.0, 0.5, 0.1, alpha)
-        elseif p.combo >= 3 then
+        elseif isComboKill then
             love.graphics.setColor(1.0, 0.85, 0.1, alpha)
         else
             love.graphics.setColor(0.7, 0.9, 1.0, alpha)
         end
-        love.graphics.printf(string.format("+%d", p.value), sx - 40 * s, sy, 80 * s, "center")
-        if p.combo >= 3 then
+        love.graphics.push()
+        love.graphics.translate(sx, sy)
+        love.graphics.rotate(p.rotation or 0)
+        love.graphics.scale(drawScale, drawScale)
+        love.graphics.printf(string.format("+%d", p.value), -40 * s, 0, 80 * s, "center")
+        if isComboKill then
             love.graphics.setColor(1.0, 0.6, 0.1, alpha * 0.8)
-            love.graphics.printf(string.format("%dx COMBO", p.combo), sx - 40 * s, sy + 14 * s, 80 * s, "center")
+            love.graphics.printf(string.format("%dx COMBO", p.combo), -40 * s, 14 * s, 80 * s, "center")
         end
+        love.graphics.pop()
     end
 end
 
@@ -1067,10 +1088,10 @@ function VoidRunnerPlayState:overlay()
         love.graphics.printf("FIRE", w - safeLeft - w * 0.3 - 4, h * 0.75, w * 0.3, "center")
     end
 
-    -- === TOP LEFT: ZONE INFO ===
+    -- === TOP LEFT: ZONE INFO (slides in on zone change) ===
     local zoneName = self.zoneManager:getZoneName(self.currentZone)
     local zoneStr = string.format("ZONE %d", self.currentZone)
-    local tlX = (14 + safeLeft) * s
+    local tlX = (self.zoneLabelX + safeLeft) * s
     local tlY = (10 * s) + safeTop
     bracket(tlX - 4 * s, tlY - 2 * s, 140 * s, 38 * s, {0.25, 0.6, 1.0, 0.35}, 1)
     love.graphics.setFont(self.zone_font)
@@ -1087,12 +1108,33 @@ function VoidRunnerPlayState:overlay()
     local tcY = (10 * s) + safeTop
     bracket(tcX, tcY, tcW, tcH, {0.3, 0.65, 1.0, 0.45}, 1.2)
     love.graphics.setFont(self.mono_font)
-    love.graphics.setColor(0.9, 0.95, 1.0, 0.9 * flicker)
+    -- depth flash white on zone change
+    if self.depthFlash and self.depthFlash > 0 then
+        love.graphics.setColor(1, 1, 1, 0.9 * flicker)
+    else
+        love.graphics.setColor(0.9, 0.95, 1.0, 0.9 * flicker)
+    end
     love.graphics.printf(depthStr, tcX, tcY + tcH / 2 - 11 * s, tcW, "center")
     -- tiny label above
     love.graphics.setFont(self.zone_font)
     love.graphics.setColor(0.35, 0.6, 1.0, 0.4)
     love.graphics.printf("DEPTH", tcX, tcY - 12 * s, tcW, "center")
+    -- depth progress bar toward next zone
+    local zoneData = self.zoneManager:getZoneData(self.currentZone)
+    if zoneData and zoneData.endDepth ~= math.huge then
+        local startD = zoneData.startDepth or 0
+        local endD = zoneData.endDepth
+        local zoneProgress = math.max(0, math.min(1, (self.depth - startD) / (endD - startD)))
+        local barW = tcW - 8 * s
+        local barH = 3 * s
+        local barX = tcX + 4 * s
+        local barY = tcY + tcH + 2 * s
+        love.graphics.setColor(0.15, 0.25, 0.4, 0.3)
+        love.graphics.rectangle('fill', barX, barY, barW, barH)
+        local zr, zg, zb = self.zoneColor.r, self.zoneColor.g, self.zoneColor.b
+        love.graphics.setColor(zr * 0.5 + 0.5, zg * 0.5 + 0.5, zb * 0.5 + 0.5, 0.7)
+        love.graphics.rectangle('fill', barX, barY, barW * zoneProgress, barH)
+    end
 
     -- === TOP RIGHT: WARP + SHIELD ===
     local trX = w - 14 * s
@@ -1139,6 +1181,22 @@ function VoidRunnerPlayState:overlay()
         local comboAlpha = math.min(1, self.comboTimer / 0.5)
         local comboScale = 1 + self.comboFlash * 2
         love.graphics.setFont(self.best_font)
+
+        -- combo glow background at 5+
+        if self.combo >= 5 then
+            local glowR, glowG, glowB = 1.0, 0.65, 0.1
+            if self.combo >= 10 then glowR, glowG, glowB = 1.0, 0.3, 0.1 end
+            local bgW = 120 * s
+            local bgH = 28 * s
+            local bgX = cx - bgW / 2
+            local bgY = h - 60 * s
+            love.graphics.setColor(0.02, 0.02, 0.04, comboAlpha * 0.6)
+            love.graphics.rectangle('fill', bgX, bgY, bgW, bgH)
+            love.graphics.setColor(glowR, glowG, glowB, comboAlpha * 0.5)
+            love.graphics.setLineWidth(1 * s)
+            love.graphics.rectangle('line', bgX, bgY, bgW, bgH)
+        end
+
         if self.combo >= 10 then
             love.graphics.setColor(1.0, 0.3, 0.1, comboAlpha)
         elseif self.combo >= 5 then

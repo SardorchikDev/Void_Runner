@@ -1,8 +1,8 @@
--- NEW: Realistic deep-space parallax background with spectral star colors, Milky Way dust, and shooting stars.
+-- Realistic deep-space parallax background with spectral star colors, Milky Way dust, and shooting stars.
 ParallaxStars = class('ParallaxStars', Entity)
-ParallaxStars.static.COUNT = 280
-ParallaxStars.static.NEBULA_COUNT = 8
-ParallaxStars.static.LAYER_SPEEDS = {0.15, 0.35, 0.6, 1.0}
+ParallaxStars.static.COUNT = 420
+ParallaxStars.static.NEBULA_COUNT = 14
+ParallaxStars.static.LAYER_SPEEDS = {0.15, 0.35, 0.6, 1.0, 1.4}
 
 -- Realistic star spectral colors (O B A F G K M)
 ParallaxStars.static.STAR_COLORS = {
@@ -22,6 +22,7 @@ function ParallaxStars:initialize()
     self.galaxies = {}
     self.milkyWayBands = {}
     self.shootingStars = {}
+    self.fastShootingStars = {}
 
     for i = 1, #ParallaxStars.LAYER_SPEEDS do table.insert(self.starlayers, {}) end
 end
@@ -54,9 +55,14 @@ function ParallaxStars:start()
 
         local sizeRoll = math.random()
         local size = 1
-        if sizeRoll > 0.985 then size = 4      -- rare giant
-        elseif sizeRoll > 0.92 then size = 3   -- bright star
-        elseif sizeRoll > 0.7 then size = 2    -- average
+        if layerIdx == 5 then
+            -- 5th layer: dense dusty midground, cap at 1.5px
+            size = lume.random(0.5, 1.5)
+        else
+            if sizeRoll > 0.985 then size = 4      -- rare giant
+            elseif sizeRoll > 0.92 then size = 3   -- bright star
+            elseif sizeRoll > 0.7 then size = 2    -- average
+            end
         end
 
         table.insert(layer, {
@@ -71,7 +77,24 @@ function ParallaxStars:start()
     end
 
     -- nebulas with realistic space colors
+    local nebulaPresets = {
+        {0.08, 0.15, 0.35, 0.12}, -- blue reflection nebula
+        {0.25, 0.08, 0.15, 0.10}, -- red emission nebula
+        {0.15, 0.05, 0.25, 0.09}, -- purple planetary
+        {0.08, 0.25, 0.15, 0.08}, -- greenish (OIII)
+        {0.2,  0.12, 0.08, 0.09}, -- warm brown dust
+        {0.25, 0.18, 0.05, 0.08}, -- warm amber/gold
+        {0.04, 0.22, 0.20, 0.08}, -- teal
+    }
     for i = 1, ParallaxStars.NEBULA_COUNT do
+        local ellipses = {}
+        for e = 1, 5 do
+            table.insert(ellipses, {
+                scaleX = lume.random(0.6, 1.4),
+                scaleY = lume.random(0.4, 1.2),
+                angleOffset = lume.random(-0.5, 0.5),
+            })
+        end
         table.insert(self.nebulas, {
             pos = vector(
                 lume.random(self.left - worldW * 0.4, self.right + worldW * 0.4),
@@ -80,13 +103,8 @@ function ParallaxStars:start()
             size = lume.random(100, 280),
             rotation = lume.random(0, math.pi * 2),
             rotationSpeed = lume.random(-0.08, 0.08),
-            color = lume.randomchoice({
-                {0.08, 0.15, 0.35, 0.12}, -- blue reflection nebula
-                {0.25, 0.08, 0.15, 0.10}, -- red emission nebula
-                {0.15, 0.05, 0.25, 0.09}, -- purple planetary
-                {0.08, 0.25, 0.15, 0.08}, -- greenish (OIII)
-                {0.2,  0.12, 0.08, 0.09}, -- warm brown dust
-            })
+            color = lume.randomchoice(nebulaPresets),
+            ellipses = ellipses,
         })
     end
 
@@ -108,8 +126,16 @@ function ParallaxStars:start()
         })
     end
 
-    -- Milky Way dust bands
-    for i = 1, 5 do
+    -- Milky Way dust bands (10 bands, 3 stacked ellipses each)
+    for i = 1, 10 do
+        local subEllipses = {}
+        for s = 1, 3 do
+            table.insert(subEllipses, {
+                widthMul = lume.random(0.8, 1.2),
+                heightMul = lume.random(0.7, 1.3),
+                angleOffset = lume.random(-0.15, 0.15),
+            })
+        end
         table.insert(self.milkyWayBands, {
             pos = vector(
                 lume.random(self.left - worldW * 0.3, self.right + worldW * 0.3),
@@ -119,23 +145,31 @@ function ParallaxStars:start()
             height = lume.random(20, 60),
             rotation = lume.random(-0.3, 0.3),
             color = {0.12, 0.1, 0.15, 0.06},
-            driftSpeed = lume.random(0.5, 1.2)
+            driftSpeed = lume.random(0.5, 1.2),
+            subEllipses = subEllipses,
         })
     end
 
     self.time = 0
     self.zoneColor = {r = 0, g = 0, b = 0}
-    self.shootingStarTimer = lume.random(2, 6)
+    self.zoneDepthFactor = 0
+    self.shootingStarTimer = lume.random(1.5, 4)
+    self.fastShootingStarTimer = lume.random(1, 3)
 end
 
 function ParallaxStars:setZoneColor(zc)
     self.zoneColor = zc or {r = 0, g = 0, b = 0}
 end
 
+function ParallaxStars:setZoneDepthFactor(f)
+    self.zoneDepthFactor = f or 0
+end
+
 function ParallaxStars:draw()
     local zr = self.zoneColor.r or 0
     local zg = self.zoneColor.g or 0
     local zb = self.zoneColor.b or 0
+    local depthRedShift = (self.zoneDepthFactor or 0) * 0.08
 
     -- galaxies (farthest back)
     for _, galaxy in ipairs(self.galaxies) do
@@ -154,35 +188,56 @@ function ParallaxStars:draw()
         love.graphics.pop()
     end
 
-    -- Milky Way dust bands
+    -- Milky Way dust bands (3 stacked ellipses per band)
     for _, band in ipairs(self.milkyWayBands) do
-        love.graphics.setColor(
-            math.min(1, band.color[1] + zr * 0.2),
-            math.min(1, band.color[2] + zg * 0.2),
-            math.min(1, band.color[3] + zb * 0.2),
-            band.color[4]
-        )
-        love.graphics.push()
-        love.graphics.translate(band.pos:unpack())
-        love.graphics.rotate(band.rotation)
-        love.graphics.ellipse('fill', 0, 0, band.width, band.height)
-        love.graphics.pop()
+        local cr = math.min(1, band.color[1] + zr * 0.2)
+        local cg = math.min(1, band.color[2] + zg * 0.2)
+        local cb = math.min(1, band.color[3] + zb * 0.2)
+        local ca = band.color[4]
+        for _, sub in ipairs(band.subEllipses) do
+            love.graphics.setColor(cr, cg, cb, ca)
+            love.graphics.push()
+            love.graphics.translate(band.pos:unpack())
+            love.graphics.rotate(band.rotation + sub.angleOffset)
+            love.graphics.ellipse('fill', 0, 0, band.width * sub.widthMul, band.height * sub.heightMul)
+            love.graphics.pop()
+        end
     end
 
-    -- nebulas
+    -- nebulas (5 concentric ellipses + additive color pass)
     for _, nebula in ipairs(self.nebulas) do
-        love.graphics.setColor(
-            math.min(1, nebula.color[1] + zr * 0.3),
-            math.min(1, nebula.color[2] + zg * 0.3),
-            math.min(1, nebula.color[3] + zb * 0.3),
-            nebula.color[4]
-        )
+        local nr = math.min(1, nebula.color[1] + zr * 0.3)
+        local ng = math.min(1, nebula.color[2] + zg * 0.3)
+        local nb = math.min(1, nebula.color[3] + zb * 0.3)
+        local na = nebula.color[4]
+
         love.graphics.push()
         love.graphics.translate(nebula.pos:unpack())
-        love.graphics.rotate(nebula.rotation)
-        for i = 3, 1, -1 do
-            love.graphics.circle('fill', 0, 0, nebula.size * i / 3)
+
+        -- normal pass: 5 concentric ellipses
+        for ei = 5, 1, -1 do
+            local e = nebula.ellipses[ei]
+            local frac = ei / 5
+            love.graphics.setColor(nr, ng, nb, na * frac)
+            love.graphics.push()
+            love.graphics.rotate(nebula.rotation + e.angleOffset)
+            love.graphics.ellipse('fill', 0, 0, nebula.size * frac * e.scaleX, nebula.size * frac * e.scaleY)
+            love.graphics.pop()
         end
+
+        -- additive hot-core pass
+        love.graphics.setBlendMode('add')
+        for ei = 3, 1, -1 do
+            local e = nebula.ellipses[ei]
+            local frac = ei / 5
+            love.graphics.setColor(nr * 1.5, ng * 1.2, nb * 0.8, na * frac * 0.5)
+            love.graphics.push()
+            love.graphics.rotate(nebula.rotation + e.angleOffset)
+            love.graphics.ellipse('fill', 0, 0, nebula.size * frac * 0.6 * e.scaleX, nebula.size * frac * 0.6 * e.scaleY)
+            love.graphics.pop()
+        end
+        love.graphics.setBlendMode('alpha')
+
         love.graphics.pop()
     end
 
@@ -193,7 +248,7 @@ function ParallaxStars:draw()
             local twinkle = math.sin(self.time * star.twinkleSpeed + star.twinkleOffset) * 0.3 + 0.7
             local alpha = star.brightness * twinkle * speed * 0.5
 
-            local sr = math.min(1, star.color[1] + zr * 0.3)
+            local sr = math.min(1, star.color[1] + zr * 0.3 + depthRedShift)
             local sg = math.min(1, star.color[2] + zg * 0.3)
             local sb = math.min(1, star.color[3] + zb * 0.3)
 
@@ -209,13 +264,19 @@ function ParallaxStars:draw()
             love.graphics.setColor(sr, sg, sb, alpha)
             love.graphics.circle('fill', star.pos.x, star.pos.y, star.size)
 
-            -- cross flare for very bright stars
+            -- cross flare for giant stars (cardinal + 45-degree diagonals)
             if star.isGiant and star.brightness > 0.8 then
                 love.graphics.setColor(sr, sg, sb, alpha * 0.3)
                 love.graphics.setLineWidth(0.5)
                 local flareLen = star.size * 6
+                -- cardinal
                 love.graphics.line(star.pos.x - flareLen, star.pos.y, star.pos.x + flareLen, star.pos.y)
                 love.graphics.line(star.pos.x, star.pos.y - flareLen, star.pos.x, star.pos.y + flareLen)
+                -- 4-point diagonal cross flares
+                local diagLen = flareLen * 0.6
+                love.graphics.setColor(sr, sg, sb, alpha * 0.15)
+                love.graphics.line(star.pos.x - diagLen, star.pos.y - diagLen, star.pos.x + diagLen, star.pos.y + diagLen)
+                love.graphics.line(star.pos.x + diagLen, star.pos.y - diagLen, star.pos.x - diagLen, star.pos.y + diagLen)
             end
         end
     end
@@ -224,10 +285,8 @@ function ParallaxStars:draw()
     for _, ss in ipairs(self.shootingStars) do
         local alpha = math.max(0, ss.life / ss.maxLife)
         love.graphics.setLineWidth(1.5)
-        -- head
         love.graphics.setColor(1, 1, 1.0, alpha)
         love.graphics.circle('fill', ss.pos.x, ss.pos.y, 1.5)
-        -- tail fade
         for t = 1, 8 do
             local trailAlpha = alpha * (1 - t / 8) * 0.4
             local tx = ss.pos.x - ss.vel.x * t * 0.015
@@ -235,6 +294,16 @@ function ParallaxStars:draw()
             love.graphics.setColor(0.7, 0.85, 1.0, trailAlpha)
             love.graphics.circle('fill', tx, ty, 1.2 - t * 0.1)
         end
+    end
+
+    -- fast shooting stars (thin streaks)
+    for _, ss in ipairs(self.fastShootingStars) do
+        local alpha = math.max(0, ss.life / ss.maxLife)
+        love.graphics.setLineWidth(0.5)
+        love.graphics.setColor(0.8, 0.9, 1.0, alpha * 0.7)
+        local tailX = ss.pos.x - ss.vel.x * 0.02
+        local tailY = ss.pos.y - ss.vel.y * 0.02
+        love.graphics.line(ss.pos.x, ss.pos.y, tailX, tailY)
     end
 end
 
@@ -246,15 +315,20 @@ function ParallaxStars:update(dt)
         self.right, self.bottom = self.gameState.cam:worldCoords(love.graphics.getWidth(), love.graphics.getHeight())
     end
 
+    -- update zone depth factor from gameState
+    if self.gameState and self.gameState.depth then
+        self.zoneDepthFactor = math.min(1, self.gameState.depth / 4500)
+    end
+
     local baseSpeed = (self.gameState and self.gameState.scrollSpeed) and (self.gameState.scrollSpeed * 0.35) or 40
     if self.gameState and self.gameState.timeWarpActive then
         baseSpeed = baseSpeed * 0.25
     end
 
-    -- shooting stars
+    -- shooting stars (normal)
     self.shootingStarTimer = self.shootingStarTimer - dt
     if self.shootingStarTimer <= 0 then
-        self.shootingStarTimer = lume.random(3, 8)
+        self.shootingStarTimer = lume.random(1.5, 4)
         if math.random() < 0.6 then
             local angle = lume.random(math.pi * 0.1, math.pi * 0.4)
             local speed = lume.random(400, 700)
@@ -276,6 +350,32 @@ function ParallaxStars:update(dt)
         ss.life = ss.life - dt
         if ss.life <= 0 or ss.pos.y > self.bottom + 100 then
             table.remove(self.shootingStars, i)
+        end
+    end
+
+    -- fast shooting stars (second type)
+    self.fastShootingStarTimer = self.fastShootingStarTimer - dt
+    if self.fastShootingStarTimer <= 0 then
+        self.fastShootingStarTimer = lume.random(1, 3)
+        local angle = lume.random(math.pi * 0.05, math.pi * 0.45)
+        local speed = lume.random(900, 1400)
+        table.insert(self.fastShootingStars, {
+            pos = vector(
+                lume.random(self.left, self.right),
+                self.top - lume.random(10, 50)
+            ),
+            vel = vector(math.cos(angle) * speed, math.sin(angle) * speed),
+            life = lume.random(0.2, 0.35),
+            maxLife = 0.35
+        })
+    end
+
+    for i = #self.fastShootingStars, 1, -1 do
+        local ss = self.fastShootingStars[i]
+        ss.pos = ss.pos + ss.vel * dt
+        ss.life = ss.life - dt
+        if ss.life <= 0 or ss.pos.y > self.bottom + 100 then
+            table.remove(self.fastShootingStars, i)
         end
     end
 

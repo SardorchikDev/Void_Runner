@@ -1,4 +1,4 @@
--- NEW: Fast horizontal enemy ship that leads the player with single cyan shots.
+-- Fast horizontal enemy ship that leads the player with single cyan shots.
 EnemyScout = class('EnemyScout', Entity)
 EnemyScout.static.HEALTH = 2
 EnemyScout:include(Stateful)
@@ -17,11 +17,13 @@ function EnemyScout:initialize(side, duration)
     self.targetY = nil
     self.health = EnemyScout.HEALTH
     self.radius = EnemyScout.SIZE
+    self.hitFlash = 0
     self:gotoState('Entering')
 end
 
 function EnemyScout:takeDamage(amount)
     self.health = self.health - (amount or 1)
+    self.hitFlash = 0.1
     if self.health <= 0 then
         if self.gameState then
             self.gameState:addEntity(Explosion(self.pos:clone(), 25, {
@@ -35,6 +37,9 @@ end
 
 function EnemyScout:update(dt)
     Entity.update(self, dt)
+    if self.hitFlash > 0 then
+        self.hitFlash = self.hitFlash - dt
+    end
     if self.time > self.duration then
         self:destroy()
     end
@@ -50,28 +55,56 @@ function EnemyScout:getPlayerPos()
 end
 
 function EnemyScout:draw()
-    local r, g, b = 0.2, 0.9, 1.0
+    local S = EnemyScout.SIZE
     love.graphics.push()
     love.graphics.translate(self.pos:unpack())
     love.graphics.rotate(self.direction > 0 and 0 or math.pi)
 
-    love.graphics.setColor(r * 0.15, g * 0.15, b * 0.15, 0.4)
-    love.graphics.polygon('fill', -EnemyScout.SIZE, -EnemyScout.SIZE * 0.4,
-        EnemyScout.SIZE * 0.5, 0, -EnemyScout.SIZE, EnemyScout.SIZE * 0.4)
+    -- fuselage (thin vertical rectangle)
+    love.graphics.setColor(0.05, 0.25, 0.3, 0.8)
+    love.graphics.polygon('fill', -3, -12, 3, -12, 3, 12, -3, 12)
 
-    love.graphics.setColor(r * 0.4, g * 0.4, b * 0.4, 0.6)
-    love.graphics.polygon('fill', -EnemyScout.SIZE * 0.85, -EnemyScout.SIZE * 0.3,
-        EnemyScout.SIZE * 0.4, 0, -EnemyScout.SIZE * 0.85, EnemyScout.SIZE * 0.3)
+    -- swept wings
+    love.graphics.setColor(0.05, 0.2, 0.25, 0.7)
+    love.graphics.polygon('fill', -3, -4, -18, 8, -6, 8)
+    love.graphics.polygon('fill', 3, -4, 18, 8, 6, 8)
 
-    love.graphics.setColor(r, g, b, 0.9)
-    love.graphics.polygon('fill', -EnemyScout.SIZE * 0.7, -EnemyScout.SIZE * 0.2,
-        EnemyScout.SIZE * 0.3, 0, -EnemyScout.SIZE * 0.7, EnemyScout.SIZE * 0.2)
+    -- tail fins
+    love.graphics.setColor(0.08, 0.3, 0.35, 0.6)
+    love.graphics.polygon('fill', -3, 8, -8, 14, -3, 12)
+    love.graphics.polygon('fill', 3, 8, 8, 14, 3, 12)
 
-    love.graphics.setColor(0.2, 0.9, 1.0, 0.6)
-    love.graphics.circle('fill', -EnemyScout.SIZE * 0.8, 0, 3)
+    -- chromatic panel lines
+    love.graphics.setColor(0.03, 0.15, 0.2, 0.4)
+    love.graphics.setLineWidth(0.5)
+    love.graphics.line(-2, -8, -2, 8)
+    love.graphics.line(2, -8, 2, 8)
+    love.graphics.line(-3, 0, 3, 0)
 
-    love.graphics.setColor(1, 1, 1, 0.8)
-    love.graphics.circle('fill', 0, 0, 1.5)
+    -- edge outline
+    love.graphics.setColor(0.2, 0.9, 1.0, 0.9)
+    love.graphics.setLineWidth(1)
+    love.graphics.polygon('line', -3, -12, 3, -12, 3, 12, -3, 12)
+    love.graphics.polygon('line', -3, -4, -18, 8, -6, 8)
+    love.graphics.polygon('line', 3, -4, 18, 8, 6, 8)
+
+    -- cockpit teardrop
+    love.graphics.setColor(0.4, 0.9, 1.0, 0.8)
+    love.graphics.ellipse('fill', 0, -8, 2, 3)
+
+    -- engine glow (pulsing)
+    local pulse = 2 + math.sin((self.time or 0) * 8) * 1
+    love.graphics.setBlendMode('add')
+    love.graphics.setColor(0.2, 0.6, 1.0, 0.5)
+    love.graphics.circle('fill', 0, 12, pulse)
+    love.graphics.setBlendMode('alpha')
+
+    -- hit flash (white outline)
+    if self.hitFlash > 0 then
+        love.graphics.setColor(1, 1, 1, 0.8)
+        love.graphics.setLineWidth(2)
+        love.graphics.circle('line', 0, 0, S * 0.8)
+    end
 
     love.graphics.pop()
 end
